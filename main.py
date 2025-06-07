@@ -56,4 +56,4 @@ if __name__ == '__main__':
         print("INFO: DEV_MODE is True. Skipping screen capture protection.")
 
     # 6. Start the pywebview event loop
-    webview.start()
+    webview.start(debug=True)

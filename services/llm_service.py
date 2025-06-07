@@ -1,5 +1,6 @@
 from groq import Groq, APIStatusError
 from core.config import settings
+from core.prompts import get_interview_suggestion_prompt
 
 def verify_groq_api_key():
     """
@@ -20,3 +21,28 @@ def verify_groq_api_key():
     except Exception as e:
         print(f"ERROR: An unexpected error occurred while verifying Groq key: {e}")
         return False
+
+def get_ai_suggestion(question: str, context: dict) -> str:
+    """
+    Gets an AI-generated suggestion for an interview question.
+    """
+    try:
+        client = Groq(api_key=settings.GROQ_API_KEY)
+        prompt = get_interview_suggestion_prompt(question, context)
+        
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt,
+                }
+            ],
+            model="llama3-8b-8192", # A fast and capable model
+        )
+        
+        suggestion = chat_completion.choices[0].message.content
+        return suggestion.strip()
+        
+    except Exception as e:
+        print(f"ERROR: Could not get AI suggestion: {e}")
+        return "Error: Could not generate a suggestion at this time."

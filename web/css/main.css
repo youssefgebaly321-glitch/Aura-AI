@@ -255,3 +255,55 @@ button:disabled {
         font-size: 0.9rem;
     }
 }
+/* --- Live Interview View --- */
+.live-container {
+    width: 100%;
+    max-width: 900px;
+    padding: 1.5rem;
+}
+
+.audio-indicators {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 2rem;
+    background: rgba(0,0,0,0.2);
+    padding: 1rem;
+    border-radius: var(--border-radius);
+}
+
+.indicator-group {
+    text-align: center;
+}
+
+.indicator-group label {
+    font-size: 0.9rem;
+    color: var(--subtle-text-color);
+}
+
+.volume-meter {
+    width: 100px;
+    height: 20px;
+    background-color: #333;
+    border-radius: 4px;
+    margin-top: 0.5rem;
+    transform-origin: left;
+    transition: background-color 0.1s;
+    background: linear-gradient(to right, var(--green) 0%, #333 0%);
+}
+.speaker-select {
+    margin-left: auto;
+    background: var(--surface-color);
+    color: var(--text-color);
+    border: 1px solid var(--highlight-color);
+    border-radius: 4px;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.85rem;
+}
+
+.instruction-text {
+    font-size: 0.8rem;
+    color: var(--subtle-text-color);
+    text-align: center;
+    margin: -0.5rem 0 1rem 0;
+    padding: 0 1rem;
+}

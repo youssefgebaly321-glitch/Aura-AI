@@ -79,17 +79,51 @@ graph TD
 *   **Goal:** Build the skeleton of the application based on the modular design.
 *   **Tasks:** Set up the Python backend project structure (`api/`, `services/`, `core/`, `desktop/`), the FastAPI server, the basic WebSocket endpoint, and the `web/` directory with a basic HTML/JS frontend capable of a simple WebSocket connection.
 
-**Phase 2: The Core Loop - Real-Time Transcription and AI Response**
-*   **Goal:** Implement the primary functionality.
-*   **Tasks:** Implement backend services for Deepgram and Groq. Implement frontend logic to capture system audio, stream it to the backend, and display the returned transcript and AI responses.
+**Phase 2: Live Interview Implementation**
+*   **Goal:** Implement the core real-time functionality of the application in a modular and scalable way. This phase is broken down into four sub-phases to manage complexity.
 
-**Phase 3: Advanced Features & User Experience**
-*   **Goal:** Build the features that make the application polished.
-*   **Tasks:** Implement the onboarding UI, context handling for the LLM prompt, "Push-to-Talk" or deepgram speaker diaraztion (to avaoid push to talk) for speaker diarization, the code pane with syntax highlighting, and the session export feature.
+---
+**Phase 2a: Core Audio Pipeline & Diarization**
+*   **Objective:** Establish a robust, modular pipeline for capturing and processing dual audio streams (candidate microphone + interviewer system audio) with speaker diarization. This is the most technically complex part and is tackled first.
+*   **Key Tasks:**
+    *   **Frontend Audio Module (`web/js/audio_handler.js`):** Create a new module to handle all audio capture logic (mic and system).
+    *   **Backend WebSocket Refactor (`api/websocket.py`):** Refactor the WebSocket handler to support dual audio streams.
+    *   **Deepgram Diarization (`services/stt_service.py`):** Enable and configure Deepgram's Diarization feature to distinguish between speakers.
 
-**Phase 4: Production Hardening & Deployment**
+**Phase 2b: AI Response Generation & Prompt Engineering**
+*   **Objective:** Generate AI responses based on the interviewer's speech, using a clean and maintainable prompt management system.
+*   **Key Tasks:**
+    *   **Prompt Engineering Module (`core/prompts.py`):** Create a new, dedicated module to store and construct all AI prompts, keeping them separate from application logic.
+    *   **Modular LLM Service (`services/llm_service.py`):** Refactor the LLM service to be more generic, receiving fully-formed prompts.
+    *   **Transcript Processing:** Implement logic to identify the interviewer's speech from the diarized transcript.
+
+**Phase 2c: Modular Live Interview UI**
+*   **Objective:** Build a modular and reusable UI for the live interview view.
+*   **Key Tasks:**
+    *   **Live UI Component (`web/js/live_ui.js`):** Create a new module responsible for all DOM manipulations on the live screen (displaying transcripts, suggestions, etc.).
+    *   **Main Controller (`web/js/main.js`):** Use the main JS file as a controller to orchestrate WebSocket events and UI updates.
+    *   **HTML & CSS:** Update HTML and add scoped, modular CSS for the new UI elements.
+
+**Phase 2d: Contextual Enhancement & Finalization**
+*   **Objective:** Enhance the AI with full context and add final touches like error handling and performance tuning.
+*   **Key Tasks:**
+    *   **Context Aggregation:** Implement logic to gather all context (resume, job desc, conversation history) to create rich prompts for the LLM.
+    *   **System Hardening:** Implement comprehensive error handling, add UI status indicators, and perform latency testing and optimization.
+
+---
+**Phase 3: Advanced Features & Polishing**
+*   **Goal:** Build out secondary features that enhance the user experience.
+*   **Tasks:**
+    *   Code snippet display with syntax highlighting.
+    *   Session summary and export feature.
+    *   Settings panel for user configuration.
+
+**Phase 4: Production & Deployment**
 *   **Goal:** Prepare the application for distribution.
-*   **Tasks:** Add comprehensive error handling, logging, and unit/integration tests. Use PyInstaller to package everything into a single `.exe` file.
+*   **Tasks:**
+    *   Add comprehensive unit and integration tests.
+    *   Use PyInstaller to package the application into a single `.exe` file.
+    *   Create a simple installer and documentation.
 
 ---
 ### **Important Considerations**

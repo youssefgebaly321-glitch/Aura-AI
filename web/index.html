@@ -48,7 +48,19 @@
         <div class="container">
             <h1>Aura Pre-Flight Check</h1>
             <div id="checks">
-                <div class="check-item" id="check-system-audio"><span class="indicator">⚪</span> System Audio</div>
+                <div class="check-item" id="check-system-audio">
+                    <span class="indicator">⚪</span>
+                    System Audio
+                    <select id="interviewer-audio-source" class="speaker-select">
+                        <option>Select Interview Source</option>
+                        <option>Chrome / Edge Tab</option>
+                        <option>Zoom / Teams App</option>
+                        <option>Entire System Audio</option>
+                    </select>
+                </div>
+                <div class="instruction-text">
+                    When prompted by the browser, please share the tab or application where your interview is taking place.
+                </div>
                 <div class="check-item" id="check-mic-permission"><span class="indicator">⚪</span> Microphone Permission</div>
                 <div class="check-item" id="check-mic-selection"><span class="indicator">⚪</span> Microphone Selection <select id="mic-select" disabled></select></div>
                 <div class="check-item" id="check-backend"><span class="indicator">⚪</span> Backend Connection</div>
@@ -61,8 +73,19 @@
 
     <!-- Stage 3: Live Interview -->
     <div id="live-view" class="view">
-        <!-- We will build this out later -->
-        <h1>Live Interview</h1>
+        <div class="live-container">
+            <h1>Live Interview</h1>
+            <div class="audio-indicators">
+                <div class="indicator-group">
+                    <label>Your Mic</label>
+                    <div id="mic-volume" class="volume-meter"></div>
+                </div>
+                <div class="indicator-group">
+                    <label>System Audio</label>
+                    <div id="system-volume" class="volume-meter"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script type="module" src="/static/js/main.js"></script>

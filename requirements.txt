@@ -6,3 +6,4 @@ pydantic-settings
 groq
 deepgram-sdk
 requests
+deepgram-sdk==3.*

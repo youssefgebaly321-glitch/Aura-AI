@@ -1,4 +1,4 @@
-import { getSystemAudio, setupMicrophone, getMicrophoneStream } from './media.js';
+import { setupMicrophone, startAudioProcessing, stopAudioProcessing } from './audio_handler.js';
 import { autofillForTesting } from './dev.js';
 
 // --- Config ---
@@ -7,8 +7,6 @@ const DEV_MODE = true; // Enables developer shortcuts
 // --- State Management ---
 const appState = {
     onboardingData: {},
-    systemStream: null,
-    micStream: null,
     socket: null,
 };
 
@@ -29,7 +27,7 @@ const onboardingForm = {
 };
 
 const checks = {
-    systemAudio: document.getElementById('check-system-audio'),
+    // System audio check is now implicit in starting the interview
     micPermission: document.getElementById('check-mic-permission'),
     micSelection: document.getElementById('check-mic-selection'),
     backend: document.getElementById('check-backend'),
@@ -40,6 +38,8 @@ const checks = {
 const micSelect = document.getElementById('mic-select');
 const proceedButton = document.getElementById('proceed-to-checks');
 const startButton = document.getElementById('start-interview-button');
+// The old visualizer divs are no longer needed with this more direct approach.
+// We'll build the proper UI in Phase 2c.
 
 
 // --- View Management ---
@@ -52,7 +52,6 @@ function switchView(targetView) {
 // --- Logic ---
 function updateCheckStatus(checkElement, status, text) {
     const indicator = checkElement.querySelector('.indicator');
-    // Find the text node to update, ignoring the <select> element
     const textNode = Array.from(checkElement.childNodes).find(node =>
         node.nodeType === Node.TEXT_NODE && node.textContent.trim() !== ''
     );
@@ -81,18 +80,10 @@ function handleOnboarding() {
 }
 
 async function runPreFlightChecks() {
-    // 1. System Audio Check
-    updateCheckStatus(checks.systemAudio, 'pending', 'Requesting System Audio...');
-    const systemStream = await getSystemAudio();
-    if (systemStream) {
-        updateCheckStatus(checks.systemAudio, 'success', 'System Audio OK');
-        systemStream.getTracks().forEach(track => track.stop());
-    } else {
-        updateCheckStatus(checks.systemAudio, 'error', 'System Audio Permission Denied');
-        return;
-    }
-
-    // 2. Microphone Check
+    // System audio check is removed from pre-flight to avoid double permission prompt.
+    // It will be requested along with the microphone when the interview starts.
+    
+    // 1. Microphone Check
     updateCheckStatus(checks.micPermission, 'pending', 'Requesting Microphone...');
     const micPermission = await setupMicrophone();
     if (micPermission) {
@@ -104,8 +95,20 @@ async function runPreFlightChecks() {
         return;
     }
     
-    // 3. Backend Connection and API Key Checks
+    // 2. Backend Connection and API Key Checks
     connectWebSocket();
+}
+
+function sendSocketMessage(type, payload) {
+    if (appState.socket && appState.socket.readyState === WebSocket.OPEN) {
+        appState.socket.send(JSON.stringify({ type, payload }));
+    }
+}
+
+function sendAudioChunk(chunk) {
+    if (appState.socket && appState.socket.readyState === WebSocket.OPEN) {
+        appState.socket.send(chunk);
+    }
 }
 
 function connectWebSocket() {
@@ -116,7 +119,6 @@ function connectWebSocket() {
     socket.onopen = function(e) {
         console.log("[open] Connection established");
         updateCheckStatus(checks.backend, 'success', 'Backend Connected');
-        // The backend will automatically start sending API key status
         updateCheckStatus(checks.deepgram, 'pending', 'Checking Deepgram API...');
         updateCheckStatus(checks.groq, 'pending', 'Checking Groq API...');
     };
@@ -131,6 +133,7 @@ function connectWebSocket() {
 
     socket.onmessage = function(event) {
         const data = JSON.parse(event.data);
+        // We will add logging here for the transcript and suggestion messages
         console.log("Received from backend:", data);
 
         if (data.type === 'api_key_status') {
@@ -144,12 +147,18 @@ function connectWebSocket() {
                 updateCheckStatus(checkElement, 'error', `${serviceName} API Key Invalid`);
             }
             checkAllSystemsGo();
+        } else if (data.type === 'transcript_update') {
+            console.log('TRANSCRIPT:', data.payload);
+        } else if (data.type === 'suggestion_update') {
+            console.log('SUGGESTION:', data.payload.suggestion);
         }
     };
 }
 
 function checkAllSystemsGo() {
-    const allGreen = Object.values(checks).every(
+    // Filter out the systemAudio check as it's no longer part of pre-flight
+    const relevantChecks = Object.values(checks).filter(el => el.id !== 'check-system-audio');
+    const allGreen = relevantChecks.every(
         check => check.querySelector('.indicator').textContent === '🟢'
     );
     if (allGreen) {
@@ -158,11 +167,45 @@ function checkAllSystemsGo() {
     }
 }
 
+async function startInterview() {
+    switchView('live');
+    
+    // Define the callback that sends audio data over the socket
+    const onAudioData = (audioData) => {
+        sendAudioChunk(audioData);
+    };
+
+    const processingStarted = await startAudioProcessing(micSelect.value, onAudioData);
+    
+    if (!processingStarted) {
+        alert("Could not start audio streams. Please check permissions and try again.");
+        switchView('preflight');
+        return;
+    }
+    
+    sendSocketMessage('start_interview', appState.onboardingData);
+}
+
+function endInterview() {
+    stopAudioProcessing();
+    sendSocketMessage('end_interview', {});
+    switchView('onboarding');
+}
 
 // --- Event Listeners ---
 proceedButton.addEventListener('click', handleOnboarding);
+startButton.addEventListener('click', startInterview);
 
 window.addEventListener('DOMContentLoaded', () => {
+    // Remove the temporary visualizer elements since they are no longer used
+    const micVolume = document.getElementById('mic-volume');
+    const systemVolume = document.getElementById('system-volume');
+    if (micVolume) micVolume.parentElement.parentElement.remove();
+    
+    // Also remove the now-unused system audio check from the preflight view
+    const systemAudioCheck = document.getElementById('check-system-audio');
+    if(systemAudioCheck) systemAudioCheck.remove();
+
     switchView('onboarding');
 });
 
