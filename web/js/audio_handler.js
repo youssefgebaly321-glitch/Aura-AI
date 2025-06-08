@@ -3,11 +3,11 @@
 // for capturing and processing audio via an AudioWorklet.
 
 import { devLog, devError } from './config.js';
+import muteManager from './mute-manager.js';
 
 let audioContext = null;
 let micStream = null;
 let systemStream = null;
-let isMuted = true; // Default to muted for privacy
 let micGainNode = null;
 
 /**
@@ -72,31 +72,32 @@ export async function startAudioProcessing(micId, onAudioData) {
         let audioProcessingCounter = 0; // For throttled logging
         
         mixedProcessor.port.onmessage = (event) => {
+            // If universally muted, drop all audio data immediately.
+            if (muteManager.isAudioPaused()) {
+                if (audioProcessingCounter % 200 === 0) { // Log occasionally to show it's paused
+                    devLog(`⏸️ Audio processing paused due to universal mute.`);
+                }
+                audioProcessingCounter++;
+                return;
+            }
+
             const { audioData, micLevel, systemLevel } = event.data;
-            
             let speakerHint;
-            
-            if (isMuted) {
-                // When muted, ALL audio is considered as interviewer speech
-                // This handles multiple interviewers or any external audio
-                speakerHint = 'system'; // Always treat as interviewer when muted
-                
-                // Log only every 100th message to avoid console spam
+
+            if (muteManager.isMicrophoneMuted()) {
+                // When microphone is muted, all audio is from the interviewer.
+                speakerHint = 'system';
                 if (audioProcessingCounter % 100 === 0) {
-                    devLog(`🔇 Muted mode: All audio treated as interviewer (mic: ${micLevel.toFixed(3)}, sys: ${systemLevel.toFixed(3)})`);
+                    devLog(`🔇 Mic Muted: All audio treated as interviewer (mic: ${micLevel.toFixed(3)}, sys: ${systemLevel.toFixed(3)})`);
                 }
             } else {
-                // When unmuted, use volume-based detection to distinguish speakers
-                // If system audio is much louder, likely interviewer speaking
-                // If microphone is louder, likely candidate speaking
+                // When unmuted, distinguish based on volume.
                 speakerHint = systemLevel > micLevel * 2 ? 'system' : 'microphone';
-                
-                // Log only every 100th message to avoid console spam
                 if (audioProcessingCounter % 100 === 0) {
-                    devLog(`🎤 Unmuted mode: Speaker detected as ${speakerHint} (mic: ${micLevel.toFixed(3)}, sys: ${systemLevel.toFixed(3)})`);
+                    devLog(`🎤 Unmuted: Speaker is ${speakerHint} (mic: ${micLevel.toFixed(3)}, sys: ${systemLevel.toFixed(3)})`);
                 }
             }
-            
+
             audioProcessingCounter++;
             onAudioData(audioData, speakerHint);
         };
@@ -105,10 +106,12 @@ export async function startAudioProcessing(micId, onAudioData) {
         const micSource = audioContext.createMediaStreamSource(micStream);
         const systemSource = audioContext.createMediaStreamSource(systemStream);
         
-        // Create gain node for microphone muting (starts muted by default)
+        // Create gain node for microphone muting
         micGainNode = audioContext.createGain();
-        micGainNode.gain.value = isMuted ? 0 : 1;
-        devLog(`🎤 Microphone initialized as ${isMuted ? 'muted' : 'unmuted'} by default`);
+        updateMicGainNode(); // Set initial gain based on mute manager state
+        
+        // Listen for future changes
+        muteManager.on('microphoneMuteChange', updateMicGainNode);
         
         // Connect mic through gain node for mute control
         micSource.connect(micGainNode);
@@ -131,52 +134,49 @@ export async function startAudioProcessing(micId, onAudioData) {
 }
 
 /**
- * Mute or unmute the microphone input to the app
- * @param {boolean} mute - True to mute, false to unmute
+ * Updates the microphone gain node based on the central mute manager state.
+ */
+function updateMicGainNode() {
+    if (!micGainNode || !audioContext) return;
+    
+    const isMuted = muteManager.isMicrophoneMuted();
+    const targetGain = isMuted ? 0 : 1;
+    
+    // Smooth transition to avoid audio pops
+    micGainNode.gain.setTargetAtTime(targetGain, audioContext.currentTime, 0.05);
+    devLog(`🎤 Microphone gain set to ${targetGain} based on mute manager.`);
+}
+
+// --- Legacy Functions (now wrappers for MuteManager) ---
+// These are kept for backward compatibility with other modules that might call them.
+
+/**
+ * @deprecated Use muteManager.setMicrophoneMute(mute) instead.
  */
 export function setMicrophoneMute(mute) {
-    const wasDebugMode = isMuted;
-    isMuted = mute;
-    
-    if (micGainNode) {
-        // Smooth transition to avoid audio pops
-        micGainNode.gain.setTargetAtTime(mute ? 0 : 1, audioContext.currentTime, 0.1);
-        
-        // Log the mute state change with implications
-        if (mute) {
-            console.log(`🔇 Microphone MUTED - All audio will be treated as interviewer speech`);
-        } else {
-            console.log(`🎤 Microphone UNMUTED - Audio detection based on volume levels (candidate vs interviewer)`);
-        }
-    }
-    return isMuted;
+    muteManager.setMicrophoneMute(mute);
+    return muteManager.isMicrophoneMuted();
 }
 
 /**
- * Get current mute state
+ * @deprecated Use muteManager.isMicrophoneMuted() instead.
  */
 export function isMicrophoneMuted() {
-    return isMuted;
+    return muteManager.isMicrophoneMuted();
 }
 
 /**
- * Toggle microphone mute state
+ * @deprecated Use muteManager.toggleMicrophoneMute() instead.
  */
 export function toggleMicrophoneMute() {
-    return setMicrophoneMute(!isMuted);
+    return muteManager.toggleMicrophoneMute();
 }
 
 /**
- * Get current audio processing mode information
+ * @deprecated Use muteManager.getMuteStatus() instead.
  */
 export function getAudioProcessingMode() {
-    return {
-        isMuted: isMuted,
-        mode: isMuted ? 'All audio treated as interviewer' : 'Volume-based speaker detection',
-        description: isMuted
-            ? 'Microphone muted - All voices (1 or multiple interviewers) processed as interviewer speech'
-            : 'Microphone unmuted - Distinguishing between candidate and interviewer based on audio levels'
-    };
+    return muteManager.getMuteStatus();
 }
 
 /**
@@ -197,7 +197,8 @@ export function stopAudioProcessing() {
         audioContext = null;
     }
     
-    // Reset mute state to default (muted)
-    isMuted = true;
+    // Reset mute state in the central manager
+    muteManager.setMicrophoneMute(true);
+    muteManager.setUniversalMute(false);
     micGainNode = null;
 }

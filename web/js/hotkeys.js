@@ -2,10 +2,10 @@
 // Provides keyboard shortcuts for transparency and other controls
 
 import { devLog } from './config.js';
+import muteManager from './mute-manager.js';
 
 class HotkeyManager {
     constructor() {
-        this.isAltLPressed = false;
         this.transparencyLevels = [0.2, 0.4, 0.6, 0.8, 1.0]; // 5 levels: 20%, 40%, 60%, 80%, 100%
         this.currentTransparencyLevel = 3; // Default to 80% (index 3)
         this.isEnabled = true;
@@ -21,7 +21,8 @@ class HotkeyManager {
         
         // Prevent default browser shortcuts that might interfere
         document.addEventListener('keydown', (e) => {
-            if (e.altKey && (e.key.toLowerCase() === 'l' || e.key.toLowerCase() === 'm')) {
+            // Prevent default browser actions for Alt+[ and Alt+]
+            if (e.altKey && ['[', ']', 'm', 'u'].includes(e.key.toLowerCase())) {
                 e.preventDefault();
             }
         });
@@ -30,45 +31,33 @@ class HotkeyManager {
     handleKeyDown(event) {
         if (!this.isEnabled) return;
 
-        // Check for Alt+M combination (microphone mute)
+        // Check for Alt+M for microphone mute
         if (event.altKey && event.key.toLowerCase() === 'm') {
             this.toggleMicrophoneMute();
-            event.preventDefault();
             return;
         }
 
-        // Check for Alt+L combination
-        if (event.altKey && event.key.toLowerCase() === 'l') {
-            this.isAltLPressed = true;
-            this.showTransparencyHint();
-            event.preventDefault();
+        // Check for Alt+U for universal mute/pause
+        if (event.altKey && event.key.toLowerCase() === 'u') {
+            this.toggleUniversalMute();
             return;
         }
 
-        // Handle transparency controls when Alt+L is held
-        if (this.isAltLPressed) {
-            switch (event.key) {
-                case '[':
-                    this.decreaseTransparency();
-                    event.preventDefault();
-                    break;
-                case ']':
-                    this.increaseTransparency();
-                    event.preventDefault();
-                    break;
-                case 'Escape':
-                    this.hideTransparencyHint();
-                    break;
-                case 't':
-            }
+        // Check for Alt+[ to decrease transparency
+        if (event.altKey && event.key === '[') {
+            this.decreaseTransparency();
+            return;
+        }
+
+        // Check for Alt+] to increase transparency
+        if (event.altKey && event.key === ']') {
+            this.increaseTransparency();
+            return;
         }
     }
 
     handleKeyUp(event) {
-        if (event.key === 'Alt' || event.key.toLowerCase() === 'l') {
-            this.isAltLPressed = false;
-            this.hideTransparencyHint();
-        }
+        // This method is kept for event listener consistency, but is currently empty.
     }
 
     decreaseTransparency() {
@@ -117,30 +106,12 @@ class HotkeyManager {
     }
 
     showTransparencyHint() {
-        this.removeExistingHints();
-        
-        const hint = document.createElement('div');
-        hint.id = 'transparency-hint';
-        hint.innerHTML = `
-            <div class="hotkey-hint">
-                <div class="hint-title">🎹 Transparency Control</div>
-                <div class="hint-controls">
-                    <span class="hint-key">Alt+L + [</span> Less Transparent
-                    <span class="hint-key">Alt+L + ]</span> More Transparent
-                    <span class="hint-key">Alt+M</span> Toggle Microphone Mute
-                </div>
-                <div class="hint-level">Level: ${this.currentTransparencyLevel + 1}/5 (${Math.round(this.transparencyLevels[this.currentTransparencyLevel] * 100)}%)</div>
-            </div>
-        `;
-        
-        document.body.appendChild(hint);
+        // This hint is no longer needed as the interaction is simpler
+        // The feedback on change is sufficient
     }
 
     hideTransparencyHint() {
-        const hint = document.getElementById('transparency-hint');
-        if (hint) {
-            hint.remove();
-        }
+        // This hint is no longer needed as the interaction is simpler
     }
 
     showTransparencyFeedback(percent, message = null) {
@@ -186,8 +157,7 @@ class HotkeyManager {
     }
 
     removeExistingHints() {
-        const existing = document.getElementById('transparency-hint');
-        if (existing) existing.remove();
+        // This hint is no longer needed
     }
 
     removeExistingFeedback() {
@@ -218,33 +188,30 @@ class HotkeyManager {
 
 
     toggleMicrophoneMute() {
-        // Only allow mute toggle during live interview
-        const currentView = document.querySelector('.view.active');
-        const isLiveView = currentView && currentView.id === 'live-view';
-        
-        if (!isLiveView) {
-            console.log('ℹ️ Microphone mute only available during live interview');
+        if (!this.isLiveInterviewActive()) {
             this.showMuteFeedback(false, 'Microphone mute only available in live interview');
             return;
         }
 
-        if (typeof window.toggleMicrophoneMute === 'function') {
-            const isMuted = window.toggleMicrophoneMute();
-            this.showMuteFeedback(isMuted);
-            
-            // Update the mute button if it exists
-            if (window.liveInterviewUI && window.liveInterviewUI.updateMuteButton) {
-                window.liveInterviewUI.updateMuteButton(isMuted);
-                
-                // Update activity indicator text based on mute state
-                if (window.liveInterviewUI.activityIndicator && 
-                    window.liveInterviewUI.activityIndicator.classList.contains('show')) {
-                    window.liveInterviewUI.showActivity();
-                }
-            }
-            
-            devLog(`🎤 Microphone ${isMuted ? 'muted' : 'unmuted'} via hotkey`);
+        const isMuted = muteManager.toggleMicrophoneMute();
+        this.showMuteFeedback(isMuted);
+        devLog(`🎤 Microphone ${isMuted ? 'muted' : 'unmuted'} via hotkey`);
+    }
+
+    toggleUniversalMute() {
+        if (!this.isLiveInterviewActive()) {
+            this.showUniversalMuteFeedback(false, 'Universal pause only available in live interview');
+            return;
         }
+        
+        const isPaused = muteManager.toggleUniversalMute();
+        this.showUniversalMuteFeedback(isPaused);
+        devLog(`⏸️ Universal mute ${isPaused ? 'enabled' : 'disabled'} via hotkey`);
+    }
+
+    isLiveInterviewActive() {
+        const currentView = document.querySelector('.view.active');
+        return currentView && currentView.id === 'live-view';
     }
 
     showMuteFeedback(isMuted, message = null) {
@@ -254,28 +221,46 @@ class HotkeyManager {
         feedback.id = 'transparency-feedback';
         
         if (message) {
-            feedback.innerHTML = `
-                <div class="transparency-feedback">
-                    ℹ️ ${message}
-                </div>
-            `;
+            feedback.innerHTML = `<div class="transparency-feedback">ℹ️ ${message}</div>`;
         } else {
             feedback.innerHTML = `
                 <div class="transparency-feedback">
                     🎤 Microphone ${isMuted ? 'Muted' : 'Unmuted'}
-                    <div class="mute-status">${isMuted ? '🔇 App audio input disabled' : '🎙️ App audio input enabled'}</div>
-                </div>
-            `;
+                    <div class="mute-status">${isMuted ? 'App audio input disabled' : 'App audio input enabled'}</div>
+                </div>`;
         }
         
         document.body.appendChild(feedback);
+        this.autoHideFeedback(feedback);
+    }
+
+    showUniversalMuteFeedback(isPaused, message = null) {
+        this.removeExistingFeedback();
         
-        // Auto-hide after 2 seconds
+        const feedback = document.createElement('div');
+        feedback.id = 'transparency-feedback';
+        feedback.className = isPaused ? 'universal-mute-active' : '';
+
+        if (message) {
+            feedback.innerHTML = `<div class="transparency-feedback">ℹ️ ${message}</div>`;
+        } else {
+            feedback.innerHTML = `
+                <div class="transparency-feedback">
+                    ⏸️ System ${isPaused ? 'Paused' : 'Resumed'}
+                    <div class="mute-status">${isPaused ? 'All audio processing is stopped' : 'Audio processing is active'}</div>
+                </div>`;
+        }
+        
+        document.body.appendChild(feedback);
+        this.autoHideFeedback(feedback);
+    }
+
+    autoHideFeedback(element) {
         setTimeout(() => {
-            if (feedback.parentNode) {
-                feedback.remove();
+            if (element.parentNode) {
+                element.remove();
             }
-        }, 2000);
+        }, 2500);
     }
 }
 

@@ -1,12 +1,9 @@
 import {
     setupMicrophone,
     startAudioProcessing,
-    stopAudioProcessing,
-    toggleMicrophoneMute,
-    setMicrophoneMute,
-    isMicrophoneMuted,
-    getAudioProcessingMode
+    stopAudioProcessing
 } from './audio_handler.js';
+import muteManager from './mute-manager.js';
 import { autofillForTesting } from './dev.js';
 import { loadConfig, isDev, devLog, devWarn, devError } from './config.js';
 import liveInterviewUI from './live-interview.js';
@@ -253,8 +250,9 @@ async function startInterview() {
     hotkeyManager.setEnabled(true);
     
     const onAudioData = (audioData, speakerHint) => {
-        // Always send the current mute state with the audio data
-        sendAudioChunk(audioData, isMicrophoneMuted());
+        // The audio_handler now controls whether data is sent.
+        // We just need to pass the current mic mute state along with the chunk.
+        sendAudioChunk(audioData, muteManager.isMicrophoneMuted());
     };
 
     const processingStarted = await startAudioProcessing(micSelect.value, onAudioData);
@@ -265,10 +263,12 @@ async function startInterview() {
         return;
     }
     
+    const initialMuteStatus = muteManager.getMuteStatus();
     sendSocketMessage('start_interview', {
         aiProvider: appState.selectedProvider,
         onboardingData: appState.onboardingData,
-        is_muted: isMicrophoneMuted(), // Send initial mute state
+        is_muted: initialMuteStatus.microphone,
+        is_universally_muted: initialMuteStatus.universal,
         process_all_speakers: true, // Default enabled as per plan
     });
 }
@@ -370,10 +370,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 
 // Make functions globally accessible
 window.endInterview = endInterview;
-window.toggleMicrophoneMute = toggleMicrophoneMute;
-window.setMicrophoneMute = setMicrophoneMute;
-window.isMicrophoneMuted = isMicrophoneMuted;
-window.getAudioProcessingMode = getAudioProcessingMode;
+// The mute functions are now globally exposed via mute-manager.js
 window.sendSocketMessage = sendSocketMessage; // Expose for global config
 
 // --- Developer Shortcuts ---

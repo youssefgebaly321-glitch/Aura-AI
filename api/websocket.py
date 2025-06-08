@@ -23,7 +23,8 @@ async def websocket_endpoint(websocket: WebSocket):
     # --- State Management ---
     session_state = {
         "is_muted": False,
-        "process_all_speakers": True  # Default enabled as requested
+        "process_all_speakers": True,
+        "is_universally_muted": False # System-wide pause
     }
     transcript_buffer = ""
     buffer_timer = None
@@ -44,6 +45,11 @@ async def websocket_endpoint(websocket: WebSocket):
         """Callback function to handle transcripts from Deepgram."""
         nonlocal transcript_buffer, buffer_timer
         try:
+            # If universally muted, do not process any transcripts
+            if session_state.get("is_universally_muted", False):
+                print("⏸️ System paused. Ignoring transcript.")
+                return
+
             await send_json(websocket, "transcript_update", data)
 
             is_final = data.get('is_final', False)
@@ -111,6 +117,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     onboarding_context = payload.get('onboardingData', {})
                     session_state["is_muted"] = payload.get('is_muted', False)
                     session_state["process_all_speakers"] = payload.get('process_all_speakers', True)
+                    session_state["is_universally_muted"] = payload.get('is_universally_muted', False)
 
                     if not provider_config:
                         print("❌ Cannot start interview: AI provider not selected.")
@@ -149,11 +156,20 @@ async def websocket_endpoint(websocket: WebSocket):
                     if 'processAllSpeakers' in payload:
                         session_state["process_all_speakers"] = payload['processAllSpeakers']
                         print(f"🎯 Process All Speakers config updated: {session_state['process_all_speakers']}")
+                    if 'isUniversallyMuted' in payload:
+                        session_state["is_universally_muted"] = payload['isUniversallyMuted']
+                        print(f"⏸️ Universal Mute config updated: {session_state['is_universally_muted']}")
                 elif data['type'] == 'audio_chunk':
                     if dg_manager:
+                        # If universally muted, do not process audio chunks
+                        if session_state.get("is_universally_muted", False):
+                            # Log occasionally to confirm it's working
+                            # print("⏸️ System paused. Ignoring audio chunk.")
+                            return
+
                         payload = data.get('payload', {})
                         audio_data = bytes(payload.get('audio', []))
-                        session_state["is_muted"] = payload.get('is_muted', False) # Update mute state
+                        session_state["is_muted"] = payload.get('is_muted', False) # Update mic mute state
                         
                         if len(audio_data) > 0:
                             await dg_manager.send_audio(audio_data)

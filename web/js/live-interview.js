@@ -2,6 +2,7 @@
 import { devLog, isDev } from './config.js';
 import { LiveStreaming } from './live-streaming.js';
 import { LiveControls } from './live-controls.js';
+import muteManager from './mute-manager.js';
 
 class LiveInterviewUI {
     constructor() {
@@ -36,6 +37,10 @@ class LiveInterviewUI {
         this.activityIndicator = document.getElementById('activity-indicator');
         this.endButton = document.getElementById('end-interview-btn');
         this.muteButton = document.getElementById('mute-btn');
+        
+        // Listen to the mute manager for state changes
+        muteManager.on('stateChange', (status) => this.handleMuteStateChange(status));
+        
         this.setupEventListeners();
     }
 
@@ -122,14 +127,23 @@ class LiveInterviewUI {
 
     // Show activity indicator
     showActivity(text = 'Listening...') {
-        if (this.activityIndicator) {
-            // Check if microphone is muted and update text accordingly
-            if (typeof window.isMicrophoneMuted === 'function' && window.isMicrophoneMuted()) {
-                text = 'Microphone Muted - Press Alt+M to unmute';
-            }
-            this.activityIndicator.querySelector('span').textContent = text;
-            this.activityIndicator.classList.add('show');
+        if (!this.activityIndicator) return;
+
+        const status = muteManager.getMuteStatus();
+        let indicatorText = text;
+        
+        if (status.universal) {
+            indicatorText = '⏸️ System Paused - Press Alt+U to resume';
+            this.activityIndicator.classList.add('paused');
+        } else if (status.microphone) {
+            indicatorText = '🔇 Microphone Muted - Press Alt+M to unmute';
+            this.activityIndicator.classList.remove('paused');
+        } else {
+            this.activityIndicator.classList.remove('paused');
         }
+
+        this.activityIndicator.querySelector('span').textContent = indicatorText;
+        this.activityIndicator.classList.add('show');
     }
 
     hideActivity() {
@@ -305,17 +319,18 @@ class LiveInterviewUI {
         }
     }
 
-    // Toggle microphone mute
+    // Toggle microphone mute via the UI button
     toggleMute() {
-        if (typeof window.toggleMicrophoneMute === 'function') {
-            const isMuted = window.toggleMicrophoneMute();
-            this.updateMuteButton(isMuted);
-            
-            // Update activity indicator text based on mute state
-            if (this.activityIndicator && this.activityIndicator.classList.contains('show')) {
-                this.showActivity(); // This will check mute state and update text
-            }
-        }
+        // The hotkey manager and mute manager now handle the logic.
+        // This just needs to trigger the toggle.
+        muteManager.toggleMicrophoneMute();
+    }
+
+    // Central handler for all mute state changes
+    handleMuteStateChange(status) {
+        this.updateMuteButton(status.microphone);
+        this.showActivity(); // Re-evaluates the activity indicator text
+        devLog(`UI updated for mute state: Mic=${status.microphone}, Universal=${status.universal}`);
     }
 
     // Update mute button appearance
@@ -345,17 +360,10 @@ class LiveInterviewUI {
         this.controls.initialize(); // Initialize controls module
         this.updateEmptyState();
         
-        // Correctly set initial mute button state
-        if (typeof window.isMicrophoneMuted === 'function') {
-            this.updateMuteButton(window.isMicrophoneMuted());
-        }
-        
-        // Set default mute state (muted by default for privacy)
-        if (typeof window.isMicrophoneMuted === 'function') {
-            const isMuted = window.isMicrophoneMuted();
-            this.updateMuteButton(isMuted);
-            console.log(`🎤 UI initialized with microphone ${isMuted ? 'muted' : 'unmuted'}`);
-        }
+        // Set initial UI state from the mute manager
+        const initialStatus = muteManager.getMuteStatus();
+        this.updateMuteButton(initialStatus.microphone);
+        console.log(`🎤 UI initialized with microphone ${initialStatus.microphone ? 'muted' : 'unmuted'}`);
         
         // Reset scroll state
         this.userHasScrolled = false;
