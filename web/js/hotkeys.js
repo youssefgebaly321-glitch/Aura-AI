@@ -87,6 +87,16 @@ class HotkeyManager {
         const percent = Math.round(transparency * 100);
         
         try {
+            // Only allow transparency changes during live interview
+            const currentView = document.querySelector('.view.active');
+            const isLiveView = currentView && currentView.id === 'live-view';
+            
+            if (!isLiveView) {
+                console.log('ℹ️ Transparency hotkeys only work during live interview');
+                this.showTransparencyFeedback(100, 'Transparency only available in live interview');
+                return;
+            }
+            
             // Apply Windows-level transparency
             const response = await fetch('/api/transparency', {
                 method: 'POST',
@@ -130,19 +140,28 @@ class HotkeyManager {
         }
     }
 
-    showTransparencyFeedback(percent) {
+    showTransparencyFeedback(percent, message = null) {
         this.removeExistingFeedback();
         
         const feedback = document.createElement('div');
         feedback.id = 'transparency-feedback';
-        feedback.innerHTML = `
-            <div class="transparency-feedback">
-                🪟 ${percent}% Opacity
-                <div class="transparency-bar">
-                    ${this.generateTransparencyBar()}
+        
+        if (message) {
+            feedback.innerHTML = `
+                <div class="transparency-feedback">
+                    ℹ️ ${message}
                 </div>
-            </div>
-        `;
+            `;
+        } else {
+            feedback.innerHTML = `
+                <div class="transparency-feedback">
+                    🪟 ${percent}% Opacity
+                    <div class="transparency-bar">
+                        ${this.generateTransparencyBar()}
+                    </div>
+                </div>
+            `;
+        }
         
         document.body.appendChild(feedback);
         

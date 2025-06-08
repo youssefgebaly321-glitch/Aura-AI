@@ -91,4 +91,22 @@ async def set_always_on_top(request: dict):
         status = "enabled" if on_top else "disabled"
         return {"success": True, "message": f"Always on top {status}"}
     else:
-        raise HTTPException(status_code=400, detail="Failed to set always on top") 
+        raise HTTPException(status_code=400, detail="Failed to set always on top")
+
+@router.post("/api/interview/start")
+async def start_interview_mode():
+    """Enable transparency for live interview"""
+    success = window_manager.set_app_transparency(0.6)  # 60% opacity for interviews
+    if success:
+        return {"success": True, "message": "Interview mode enabled - window is now transparent"}
+    else:
+        raise HTTPException(status_code=400, detail="Failed to enable interview transparency")
+
+@router.post("/api/interview/end")
+async def end_interview_mode():
+    """Disable transparency when leaving live interview"""
+    success = window_manager.set_app_transparency(1.0)  # 100% opacity for other views
+    if success:
+        return {"success": True, "message": "Interview mode disabled - window is now opaque"}
+    else:
+        raise HTTPException(status_code=400, detail="Failed to disable interview transparency") 

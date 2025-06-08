@@ -73,15 +73,10 @@ if __name__ == '__main__':
         import time
         time.sleep(1.0)  # Give window more time to fully initialize
         
-        # Find and configure window transparency and always-on-top
+        # Find window and configure always-on-top (but NOT transparency yet)
         if window_manager.find_aura_window():
-            # Set default transparency to 40% transparent (60% opacity) for interviews
-            success = window_manager.set_app_transparency(0.6)
-            if success:
-                print("🌙 Window transparency initialized (60% opacity)")
-            else:
-                print("⚠️ Failed to set window transparency")
-                
+            print("🔍 Window found - setting up always-on-top only")
+            
             # Wait a bit more before setting always-on-top
             time.sleep(0.5)
             
@@ -98,8 +93,10 @@ if __name__ == '__main__':
             
             if not always_on_top_success:
                 print("⚠️ Failed to set always on top after 3 attempts")
+                
+            print("ℹ️ Transparency will be applied only during live interview")
         else:
-            print("⚠️ Could not find Aura window for transparency control")
+            print("⚠️ Could not find Aura window for window management")
     
     window.events.shown += on_window_shown
 

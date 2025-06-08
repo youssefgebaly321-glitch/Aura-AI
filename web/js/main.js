@@ -189,6 +189,20 @@ function checkAllSystemsGo() {
 }
 
 async function startInterview() {
+    // Enable interview mode transparency
+    try {
+        const response = await fetch('/api/interview/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await response.json();
+        if (result.success) {
+            console.log('🌙 Interview transparency enabled');
+        }
+    } catch (error) {
+        console.error('❌ Failed to enable interview transparency:', error);
+    }
+    
     switchView('live');
     
     // Initialize the live interview UI
@@ -215,9 +229,23 @@ async function startInterview() {
     sendSocketMessage('start_interview', appState.onboardingData);
 }
 
-function endInterview() {
+async function endInterview() {
     stopAudioProcessing();
     sendSocketMessage('end_interview', {});
+    
+    // Disable transparency when leaving interview
+    try {
+        const response = await fetch('/api/interview/end', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await response.json();
+        if (result.success) {
+            console.log('🎨 Interview transparency disabled - window is now opaque');
+        }
+    } catch (error) {
+        console.error('❌ Failed to disable interview transparency:', error);
+    }
     
     // Disable hotkeys when leaving live interview
     hotkeyManager.setEnabled(false);
@@ -246,6 +274,20 @@ window.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize hotkeys (disabled by default, enabled during live interview)
     hotkeyManager.setEnabled(false);
+    
+    // Ensure window starts opaque for onboarding/preflight
+    try {
+        const response = await fetch('/api/interview/end', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await response.json();
+        if (result.success) {
+            console.log('🎨 Window initialized as opaque for onboarding');
+        }
+    } catch (error) {
+        console.log('ℹ️ Window opacity initialization (this is normal on first load)');
+    }
     
     // Clean up unused elements from old UI
     const micVolume = document.getElementById('mic-volume');
