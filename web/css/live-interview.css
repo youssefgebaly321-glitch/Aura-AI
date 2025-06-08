@@ -314,6 +314,8 @@
     justify-content: space-between;
     align-items: center;
     opacity: 0.8;
+    flex-wrap: nowrap; /* Prevent wrapping */
+    gap: 1rem; /* Add space between elements */
 }
 
 .language-tag {
@@ -324,6 +326,7 @@
     font-size: 0.7rem;
     text-transform: uppercase;
     opacity: 0.7;
+    white-space: nowrap; /* Ensure tag itself doesn't wrap */
 }
 
 .copy-btn {
@@ -331,10 +334,15 @@
     border: none;
     color: var(--text-color);
     cursor: pointer;
-    padding: 0.2rem 0.5rem;
+    padding: 0.2rem; /* Adjust padding for icon */
     border-radius: 3px;
     transition: all 0.3s ease;
     opacity: 0.6;
+    font-size: 1.1rem; /* Make icon larger */
+    line-height: 1; /* Align icon vertically */
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .copy-btn:hover {
