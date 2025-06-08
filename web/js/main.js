@@ -1,6 +1,7 @@
 import { setupMicrophone, startAudioProcessing, stopAudioProcessing } from './audio_handler.js';
 import { autofillForTesting } from './dev.js';
 import { loadConfig, isDev, devLog, devWarn, devError } from './config.js';
+import liveInterviewUI from './live-interview.js';
 
 // --- Config (now loaded from backend) ---
 // DEV_MODE is now centralized and loaded from .env via backend API
@@ -150,9 +151,23 @@ function connectWebSocket() {
             checkAllSystemsGo();
         } else if (data.type === 'transcript_update') {
             devLog('📝 TRANSCRIPT:', data.payload);
+            
+            // Send to live interview UI
+            if (window.liveInterviewUI) {
+                if (data.payload.is_final) {
+                    liveInterviewUI.addInterviewerQuestion(data.payload.transcript, false);
+                    liveInterviewUI.showActivity('Generating response...');
+                } else {
+                    liveInterviewUI.addInterviewerQuestion(data.payload.transcript, true);
+                }
+            }
         } else if (data.type === 'ai_answer') {
             devLog('🤖 AI ANSWER:', data.payload.answer);
-            // TODO: Display the AI answer in the UI (Phase 2c)
+            
+            // Send to live interview UI
+            if (window.liveInterviewUI) {
+                liveInterviewUI.addAIResponse(data.payload.answer);
+            }
         } else if (data.type === 'suggestion_update') {
             // Legacy support for old suggestion format
             devLog('🤖 SUGGESTION:', data.payload.suggestion);
@@ -175,6 +190,10 @@ function checkAllSystemsGo() {
 async function startInterview() {
     switchView('live');
     
+    // Initialize the live interview UI
+    liveInterviewUI.init();
+    liveInterviewUI.initialize();
+    
     // Define the callback that sends audio data over the socket
     const onAudioData = (audioData, speakerHint) => {
         // Send raw audio data - let Deepgram handle diarization
@@ -195,8 +214,17 @@ async function startInterview() {
 function endInterview() {
     stopAudioProcessing();
     sendSocketMessage('end_interview', {});
+    
+    // Clear the live interview UI
+    if (window.liveInterviewUI) {
+        liveInterviewUI.clearConversation();
+    }
+    
     switchView('onboarding');
 }
+
+// Make endInterview globally accessible for the live UI
+window.endInterview = endInterview;
 
 // --- Event Listeners ---
 proceedButton.addEventListener('click', handleOnboarding);
@@ -209,12 +237,11 @@ window.addEventListener('DOMContentLoaded', async () => {
     // Setup developer features if in dev mode
     setupDeveloperShortcuts();
     
-    // Remove the temporary visualizer elements since they are no longer used
+    // Clean up unused elements from old UI
     const micVolume = document.getElementById('mic-volume');
     const systemVolume = document.getElementById('system-volume');
     if (micVolume) micVolume.parentElement.parentElement.remove();
     
-    // Also remove the now-unused system audio check from the preflight view
     const systemAudioCheck = document.getElementById('check-system-audio');
     if(systemAudioCheck) systemAudioCheck.remove();
 
