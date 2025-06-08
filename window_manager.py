@@ -11,12 +11,16 @@ import time
 import tkinter as tk
 import platform
 from typing import Optional
+from threading import Thread
+from pynput import keyboard
 
 # --- Win32 API Constants ---
 # These flags are used with the SetWindowDisplayAffinity function.
 # WDA_EXCLUDEFROMCAPTURE is a comprehensive flag that prevents the window from being
 # captured by most common methods, rendering it as a black rectangle in recordings.
 WDA_EXCLUDEFROMCAPTURE = 0x00000011
+SW_HIDE = 0
+SW_SHOW = 5
 
 # --- Win32 Function Loading ---
 # We use the ctypes library to load functions directly from user32.dll, a core
@@ -35,6 +39,12 @@ _user32.SetWindowDisplayAffinity.argtypes = (wintypes.HWND, wintypes.DWORD)
 # This is a fallback method to find a window by its title if the primary method fails.
 _user32.FindWindowW.restype               = wintypes.HWND
 _user32.FindWindowW.argtypes              = (wintypes.LPCWSTR, wintypes.LPCWSTR)
+
+# Define function signatures for ShowWindow and IsWindowVisible
+_user32.ShowWindow.argtypes = (wintypes.HWND, wintypes.INT)
+_user32.ShowWindow.restype = wintypes.BOOL
+_user32.IsWindowVisible.argtypes = (wintypes.HWND,)
+_user32.IsWindowVisible.restype = wintypes.BOOL
 
 class WindowManager:
     def __init__(self):
@@ -254,6 +264,52 @@ class WindowManager:
             "platform_supported": self.is_windows,
             "window_handle": self.hwnd
         }
+
+    def toggle_visibility(self):
+        """Toggle the window's visibility."""
+        if not self.is_windows or not self.hwnd:
+            print("Window visibility control not supported or no window handle.")
+            return
+
+        if _user32.IsWindowVisible(self.hwnd):
+            _user32.ShowWindow(self.hwnd, SW_HIDE)
+            print("🕵️‍ Window hidden via global hotkey.")
+        else:
+            _user32.ShowWindow(self.hwnd, SW_SHOW)
+            print("✨ Window shown via global hotkey.")
+
+    def _start_hotkey_listener_thread(self):
+        """The actual listener thread for global hotkeys."""
+        print("🎧 Starting global hotkey listener thread...")
+
+        def on_activate():
+            print("Hotkey <alt>+z activated!")
+            self.toggle_visibility()
+
+        # Define the hotkey and its callback
+        hotkeys = {
+            '<alt>+z': on_activate,
+        }
+
+        # Start listening
+        with keyboard.GlobalHotKeys(hotkeys) as h:
+            h.join()
+
+    def start_hotkey_listener(self):
+        """Starts the global hotkey listener in a separate thread."""
+        if not self.is_windows:
+            print("Global hotkeys not supported on this platform.")
+            return
+
+        print("🚀 Initializing global hotkey listener...")
+        # Ensure we have the handle before starting
+        if not self.hwnd:
+            if not self.find_window_by_title("Aura"):
+                 print("❌ Cannot start hotkey listener: Aura window not found.")
+                 return
+        
+        listener_thread = Thread(target=self._start_hotkey_listener_thread, daemon=True)
+        listener_thread.start()
 
 # Global instance
 window_manager = WindowManager()

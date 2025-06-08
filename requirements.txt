@@ -7,3 +7,4 @@ groq
 deepgram-sdk
 requests
 deepgram-sdk==3.*
+pynput

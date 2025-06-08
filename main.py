@@ -97,6 +97,9 @@ if __name__ == '__main__':
             print("ℹ️ Transparency will be applied only during live interview")
         else:
             print("⚠️ Could not find Aura window for window management")
+        
+        # Start the global hotkey listener
+        window_manager.window_manager.start_hotkey_listener()
     
     window.events.shown += on_window_shown
 
