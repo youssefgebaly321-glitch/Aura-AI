@@ -1,10 +1,11 @@
-import { 
-    setupMicrophone, 
-    startAudioProcessing, 
-    stopAudioProcessing, 
-    toggleMicrophoneMute, 
-    setMicrophoneMute, 
-    isMicrophoneMuted 
+import {
+    setupMicrophone,
+    startAudioProcessing,
+    stopAudioProcessing,
+    toggleMicrophoneMute,
+    setMicrophoneMute,
+    isMicrophoneMuted,
+    getAudioProcessingMode
 } from './audio_handler.js';
 import { autofillForTesting } from './dev.js';
 import { loadConfig, isDev, devLog, devWarn, devError } from './config.js';
@@ -170,9 +171,17 @@ function sendSocketMessage(type, payload) {
     }
 }
 
-function sendAudioChunk(chunk) {
+function sendAudioChunk(chunk, is_muted) {
     if (appState.socket && appState.socket.readyState === WebSocket.OPEN) {
-        appState.socket.send(chunk);
+        // Use a JSON object to send both the audio chunk and mute state
+        const message = JSON.stringify({
+            type: 'audio_chunk',
+            payload: {
+                audio: Array.from(new Uint8Array(chunk)), // Convert ArrayBuffer to array for JSON
+                is_muted: is_muted
+            }
+        });
+        appState.socket.send(message);
     }
 }
 
@@ -244,7 +253,8 @@ async function startInterview() {
     hotkeyManager.setEnabled(true);
     
     const onAudioData = (audioData, speakerHint) => {
-        sendAudioChunk(audioData);
+        // Always send the current mute state with the audio data
+        sendAudioChunk(audioData, isMicrophoneMuted());
     };
 
     const processingStarted = await startAudioProcessing(micSelect.value, onAudioData);
@@ -258,6 +268,7 @@ async function startInterview() {
     sendSocketMessage('start_interview', {
         aiProvider: appState.selectedProvider,
         onboardingData: appState.onboardingData,
+        is_muted: isMicrophoneMuted(), // Send initial mute state
     });
 }
 
@@ -361,6 +372,7 @@ window.endInterview = endInterview;
 window.toggleMicrophoneMute = toggleMicrophoneMute;
 window.setMicrophoneMute = setMicrophoneMute;
 window.isMicrophoneMuted = isMicrophoneMuted;
+window.getAudioProcessingMode = getAudioProcessingMode;
 
 // --- Developer Shortcuts ---
 function setupDeveloperShortcuts() {

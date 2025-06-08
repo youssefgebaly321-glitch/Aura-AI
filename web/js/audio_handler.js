@@ -68,12 +68,36 @@ export async function startAudioProcessing(micId, onAudioData) {
         // 3. Create a single mixed processor for better diarization
         const mixedProcessor = new AudioWorkletNode(audioContext, 'mixed-processor');
 
-        // Handle mixed audio with volume-based speaker hints
+        // Handle mixed audio with mute-aware speaker detection
+        let audioProcessingCounter = 0; // For throttled logging
+        
         mixedProcessor.port.onmessage = (event) => {
             const { audioData, micLevel, systemLevel } = event.data;
             
-            // Simple heuristic: if system audio is much louder, likely interviewer speaking
-            const speakerHint = systemLevel > micLevel * 2 ? 'system' : 'microphone';
+            let speakerHint;
+            
+            if (isMuted) {
+                // When muted, ALL audio is considered as interviewer speech
+                // This handles multiple interviewers or any external audio
+                speakerHint = 'system'; // Always treat as interviewer when muted
+                
+                // Log only every 100th message to avoid console spam
+                if (audioProcessingCounter % 100 === 0) {
+                    devLog(`🔇 Muted mode: All audio treated as interviewer (mic: ${micLevel.toFixed(3)}, sys: ${systemLevel.toFixed(3)})`);
+                }
+            } else {
+                // When unmuted, use volume-based detection to distinguish speakers
+                // If system audio is much louder, likely interviewer speaking
+                // If microphone is louder, likely candidate speaking
+                speakerHint = systemLevel > micLevel * 2 ? 'system' : 'microphone';
+                
+                // Log only every 100th message to avoid console spam
+                if (audioProcessingCounter % 100 === 0) {
+                    devLog(`🎤 Unmuted mode: Speaker detected as ${speakerHint} (mic: ${micLevel.toFixed(3)}, sys: ${systemLevel.toFixed(3)})`);
+                }
+            }
+            
+            audioProcessingCounter++;
             onAudioData(audioData, speakerHint);
         };
 
@@ -111,11 +135,19 @@ export async function startAudioProcessing(micId, onAudioData) {
  * @param {boolean} mute - True to mute, false to unmute
  */
 export function setMicrophoneMute(mute) {
+    const wasDebugMode = isMuted;
     isMuted = mute;
+    
     if (micGainNode) {
         // Smooth transition to avoid audio pops
         micGainNode.gain.setTargetAtTime(mute ? 0 : 1, audioContext.currentTime, 0.1);
-        devLog(`🎤 Microphone ${mute ? 'muted' : 'unmuted'} (app-level only)`);
+        
+        // Log the mute state change with implications
+        if (mute) {
+            console.log(`🔇 Microphone MUTED - All audio will be treated as interviewer speech`);
+        } else {
+            console.log(`🎤 Microphone UNMUTED - Audio detection based on volume levels (candidate vs interviewer)`);
+        }
     }
     return isMuted;
 }
@@ -132,6 +164,19 @@ export function isMicrophoneMuted() {
  */
 export function toggleMicrophoneMute() {
     return setMicrophoneMute(!isMuted);
+}
+
+/**
+ * Get current audio processing mode information
+ */
+export function getAudioProcessingMode() {
+    return {
+        isMuted: isMuted,
+        mode: isMuted ? 'All audio treated as interviewer' : 'Volume-based speaker detection',
+        description: isMuted
+            ? 'Microphone muted - All voices (1 or multiple interviewers) processed as interviewer speech'
+            : 'Microphone unmuted - Distinguishing between candidate and interviewer based on audio levels'
+    };
 }
 
 /**

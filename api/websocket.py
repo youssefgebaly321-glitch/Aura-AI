@@ -20,7 +20,8 @@ async def websocket_endpoint(websocket: WebSocket):
     dg_manager = None
     llm_manager = None
     
-    # --- Transcript Buffering ---
+    # --- State Management ---
+    session_state = {"is_muted": False}
     transcript_buffer = ""
     buffer_timer = None
 
@@ -46,23 +47,24 @@ async def websocket_endpoint(websocket: WebSocket):
             transcript = data.get('transcript', '')
             speaker = data.get('speaker')
 
-            # --- Interviewer (Speaker 0) Logic ---
-            if transcript and speaker == 0:
+            # --- Mute-Aware Speaker Logic ---
+            # If muted, treat all speakers as the interviewer (speaker 0)
+            effective_speaker = 0 if session_state["is_muted"] else speaker
+
+            if transcript and effective_speaker == 0:
                 transcript_buffer += transcript + " "
                 
                 if buffer_timer and not buffer_timer.done():
                     buffer_timer.cancel()
                 
                 if is_final:
-                    # Use a new, clean task for the timer
                     async def delayed_processing():
                         await asyncio.sleep(1.2)
                         await process_buffered_transcript()
                     
                     buffer_timer = asyncio.create_task(delayed_processing())
 
-            # --- Candidate (Speaker 1) Logic ---
-            elif is_final and speaker == 1 and transcript:
+            elif is_final and effective_speaker == 1 and transcript:
                 candidate_response = transcript
                 print(f"👤 CANDIDATE (FINAL): {candidate_response}")
                 if llm_manager:
@@ -90,6 +92,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     payload = data.get('payload', {})
                     provider_config = payload.get('aiProvider')
                     onboarding_context = payload.get('onboardingData', {})
+                    session_state["is_muted"] = payload.get('is_muted', False) # Get initial mute state
 
                     if not provider_config:
                         print("❌ Cannot start interview: AI provider not selected.")
@@ -123,16 +126,25 @@ async def websocket_endpoint(websocket: WebSocket):
                     
                     dg_manager = DeepgramManager(on_transcript)
                     await dg_manager.start()
+                elif data['type'] == 'audio_chunk':
+                    if dg_manager:
+                        payload = data.get('payload', {})
+                        audio_data = bytes(payload.get('audio', []))
+                        session_state["is_muted"] = payload.get('is_muted', False) # Update mute state
+                        
+                        if len(audio_data) > 0:
+                            await dg_manager.send_audio(audio_data)
+                        else:
+                            print("⚠️ WARNING: Received empty audio data")
                 elif data['type'] == 'end_interview':
                     print("🛑 Ending interview session...")
                     if dg_manager:
                         await dg_manager.finish()
                     break  # End the session
-            elif 'bytes' in message:
+            elif 'bytes' in message: # Legacy support, should be deprecated
                 if dg_manager:
                     audio_data = message['bytes']
                     if len(audio_data) > 0:
-                        # Send raw audio directly to Deepgram for diarization
                         await dg_manager.send_audio(audio_data)
                     else:
                         print("⚠️ WARNING: Received empty audio data")
