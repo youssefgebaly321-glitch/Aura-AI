@@ -3,7 +3,7 @@
 :root {
     --bg-transparency: 0.85;
     --content-transparency: 0.15;
-    --code-transparency: 0.25;
+    --code-transparency: 0.45; /* Made less transparent (was 0.25, now 0.45) */
     --text-color: #ffffff;
     --border-color: rgba(255, 255, 255, 0.1);
 }

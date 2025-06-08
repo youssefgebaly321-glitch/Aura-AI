@@ -17,7 +17,7 @@ class LiveInterviewUI {
             aiStreamingSpeed: 5, // 2x faster than before (was 40, now 20)
             bgTransparency: 0.85, // Background transparency (0-1)
             contentTransparency: 0.15, // Content transparency (0-1)
-            codeTransparency: 0.25 // Code block transparency (0-1)
+            codeTransparency: 0.45 // Code block transparency (0-1) - less transparent for better readability
         };
     }
 
@@ -407,28 +407,28 @@ window.setCodeTransparency = (transparency) => {
 window.setMinimalMode = () => {
     window.setBackgroundTransparency(0.95);
     window.setContentTransparency(0.05);
-    window.setCodeTransparency(0.15);
+    window.setCodeTransparency(0.25);
     console.log('👤 Minimal mode activated');
 };
 
 window.setGhostMode = () => {
     window.setBackgroundTransparency(0.98);
     window.setContentTransparency(0.02);
-    window.setCodeTransparency(0.08);
+    window.setCodeTransparency(0.15);
     console.log('👻 Ghost mode activated - maximum transparency');
 };
 
 window.setStealthMode = () => {
     window.setBackgroundTransparency(0.90);
     window.setContentTransparency(0.10);
-    window.setCodeTransparency(0.20);
+    window.setCodeTransparency(0.35);
     console.log('🥷 Stealth mode activated');
 };
 
 window.setDefaultTransparency = () => {
     window.setBackgroundTransparency(0.85);
     window.setContentTransparency(0.15);
-    window.setCodeTransparency(0.25);
+    window.setCodeTransparency(0.45);
     console.log('🎨 Default transparency restored');
 };
 

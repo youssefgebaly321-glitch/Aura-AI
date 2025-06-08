@@ -196,7 +196,7 @@ async function startInterview() {
     
     // Define the callback that sends audio data over the socket
     const onAudioData = (audioData, speakerHint) => {
-        // Send raw audio data - let Deepgram handle diarization
+        // Send raw audio data - backend will use improved speaker detection
         sendAudioChunk(audioData);
     };
 
