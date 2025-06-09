@@ -6,6 +6,10 @@ from fastapi.staticfiles import StaticFiles
 from threading import Thread
 import window_manager  # Our new module for capture protection
 import os
+import json
+import tempfile
+import time
+from pathlib import Path
 from api import websocket, config_api
 from core.config import settings, print_config_debug
 
@@ -15,6 +19,124 @@ DEV_MODE = settings.DEV_MODE
 
 # Print configuration debug info at startup
 print_config_debug()
+
+# --- Global Command Monitor ---
+class GlobalCommandMonitor:
+    """Monitors the temp command file for global hotkey commands"""
+    
+    def __init__(self):
+        self.command_file = os.path.join(tempfile.gettempdir(), "aura_command.json")
+        self.last_command_time = 0
+        self.running = False
+        self.websocket_manager = None
+        self.startup_time = time.time()
+        self.startup_delay = 5  # Ignore commands for first 5 seconds after startup
+        
+    def set_websocket_manager(self, ws_manager):
+        """Set the websocket manager for sending commands"""
+        self.websocket_manager = ws_manager
+        
+    def start_monitoring(self):
+        """Start the command monitoring thread"""
+        # Clean up any old command files
+        try:
+            if os.path.exists(self.command_file):
+                os.remove(self.command_file)
+                print("🧹 Cleared old global command file")
+        except Exception as e:
+            print(f"⚠️ Could not clear old command file: {e}")
+        
+        self.running = True
+        monitor_thread = Thread(target=self._monitor_loop, daemon=True)
+        monitor_thread.start()
+        print("🎮 Global command monitor started")
+        
+    def stop_monitoring(self):
+        """Stop the command monitoring"""
+        self.running = False
+        
+    def _monitor_loop(self):
+        """Main monitoring loop that checks for commands"""
+        while self.running:
+            try:
+                if os.path.exists(self.command_file):
+                    # Check file modification time
+                    file_mtime = os.path.getmtime(self.command_file)
+                    
+                    if file_mtime > self.last_command_time:
+                        self.last_command_time = file_mtime
+                        
+                        # Read and process the command
+                        try:
+                            with open(self.command_file, 'r') as f:
+                                command_data = json.load(f)
+                            
+                            self._process_command(command_data)
+                            
+                        except (json.JSONDecodeError, IOError) as e:
+                            # Ignore file read errors (file might be being written)
+                            pass
+                            
+                time.sleep(0.1)  # Check every 100ms
+                
+            except Exception as e:
+                print(f"❌ Error in command monitor: {e}")
+                time.sleep(1)  # Wait longer on error
+                
+    def _process_command(self, command_data):
+        """Process a command from the global hotkey"""
+        command = command_data.get('command', '')
+        source = command_data.get('source', '')
+        
+        if source != 'global_hotkey':
+            return  # Only process global hotkey commands
+        
+        # Ignore commands during startup to prevent processing old/accidental commands
+        if time.time() - self.startup_time < self.startup_delay:
+            print(f"🎮 Ignoring global command during startup: {command}")
+            return
+            
+        print(f"🎮 Processing global command: {command}")
+        
+        # Execute the command by sending it to the browser
+        if command == 'toggle_vision_mode':
+            self._execute_browser_command('if (window.toggleVisionMode) { window.toggleVisionMode(); } else { console.warn("toggleVisionMode not available"); }')
+        elif command == 'capture_screenshot':
+            self._execute_browser_command('if (window.captureScreenshot) { window.captureScreenshot(); } else { console.warn("captureScreenshot not available"); }')
+        elif command == 'process_screenshots':
+            self._execute_browser_command('if (window.processScreenshots) { window.processScreenshots(); } else { console.warn("processScreenshots not available"); }')
+        elif command == 'switch_preset':
+            preset_key = command_data.get('preset_key', 'primary')
+            self._execute_browser_command(f'if (window.switchPreset) {{ window.switchPreset("{preset_key}"); }} else {{ console.warn("switchPreset not available"); }}')
+        else:
+            print(f"⚠️ Unknown global command: {command}")
+            
+    def _execute_browser_command(self, js_code):
+        """Execute JavaScript code in the browser"""
+        try:
+            # Use webview's evaluate_js to run the command
+            if hasattr(webview, 'windows') and webview.windows:
+                window = webview.windows[0]  # Get the first (main) window
+                
+                # Add a small delay to ensure the page is loaded
+                time.sleep(0.1)
+                
+                # Try to execute with error handling
+                try:
+                    result = window.evaluate_js(js_code)
+                    print(f"✅ Executed global command in browser: {js_code.split('&&')[0]}...")
+                except Exception as js_error:
+                    # If direct execution fails, try wrapping in setTimeout
+                    wrapped_code = f"setTimeout(() => {{ try {{ {js_code} }} catch(e) {{ console.warn('Global command error:', e); }} }}, 100);"
+                    window.evaluate_js(wrapped_code)
+                    print(f"✅ Executed global command in browser (delayed): {js_code.split('&&')[0]}...")
+            else:
+                print("⚠️ No webview window available for command execution")
+        except Exception as e:
+            print(f"❌ Failed to execute browser command: {e}")
+
+# Create global command monitor instance
+command_monitor = GlobalCommandMonitor()
 
 
 # --- FastAPI App Setup ---
@@ -100,6 +222,9 @@ if __name__ == '__main__':
         
         # Start the global hotkey listener
         window_manager.window_manager.start_hotkey_listener()
+        
+        # Start the global command monitor
+        command_monitor.start_monitoring()
     
     window.events.shown += on_window_shown
 

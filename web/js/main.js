@@ -692,10 +692,26 @@ function updateVisionModelDropdown() {
 
 // --- Preset Switching Functions ---
 function switchPreset(presetKey) {
+    console.log(`🎮 switchPreset called: ${presetKey} (could be from global hotkey)`);
+    
+    // Check if we're in interview mode
+    if (!isLiveInterviewActive()) {
+        console.warn('⚠️ Preset switching only available during live interview');
+        if (window.presetManager) {
+            presetManager.showErrorNotification('Start the interview first before switching AI presets');
+        } else {
+            alert('Please start the interview before switching AI presets');
+        }
+        return false;
+    }
+    
     if (appState.socket && appState.socket.readyState === WebSocket.OPEN) {
         sendSocketMessage('switch_preset', { preset_key: presetKey });
     } else {
         console.error('Cannot switch preset: WebSocket not connected');
+        if (window.presetManager) {
+            presetManager.showErrorNotification('WebSocket not connected - please restart the interview');
+        }
     }
 }
 
@@ -715,10 +731,26 @@ window.isScreenSharingAvailable = isScreenSharingAvailable;
 
 // --- Vision Mode Functions ---
 function toggleVisionMode() {
+    console.log('🎮 toggleVisionMode called (could be from global hotkey)');
+    
+    // Check if we're in interview mode
+    if (!isLiveInterviewActive()) {
+        console.warn('⚠️ Vision mode only available during live interview');
+        if (window.presetManager) {
+            presetManager.showErrorNotification('Start the interview first before using vision mode');
+        } else {
+            // Show simple alert if preset manager not available
+            alert('Please start the interview before using vision mode');
+        }
+        return false;
+    }
+    
     if (!appState.selectedVisionProvider.name || !appState.selectedVisionProvider.model) {
         console.warn('⚠️ Vision mode requires a vision model to be configured');
         if (window.presetManager) {
             presetManager.showErrorNotification('Vision model not configured. Please set up a vision provider in onboarding.');
+        } else {
+            alert('Vision model not configured. Please configure a vision provider in onboarding.');
         }
         return false;
     }
@@ -739,7 +771,7 @@ function toggleVisionMode() {
             muteManager.setUniversalMute(true);
         }
         
-        devLog('👁️ Vision mode activated');
+        devLog('👁️ Vision mode activated (global hotkey)');
         console.log('👁️ Vision mode activated - Audio processing paused');
     } else {
         // Disable vision mode
@@ -750,7 +782,7 @@ function toggleVisionMode() {
             muteManager.setUniversalMute(false);
         }
         
-        devLog('👁️ Vision mode deactivated');
+        devLog('👁️ Vision mode deactivated (global hotkey)');
         console.log('👁️ Vision mode deactivated - Audio processing resumed');
     }
     
@@ -758,20 +790,58 @@ function toggleVisionMode() {
 }
 
 async function captureScreenshot() {
-    if (!appState.visionMode.isActive) {
-        console.warn('⚠️ Screenshots can only be taken in vision mode');
+    console.log('🎮 captureScreenshot called (could be from global hotkey)');
+    
+    // Check if we're in interview mode
+    if (!isLiveInterviewActive()) {
+        console.warn('⚠️ Screenshots only available during live interview');
+        if (window.presetManager) {
+            presetManager.showErrorNotification('Start the interview first before taking screenshots');
+        } else {
+            alert('Please start the interview before taking screenshots');
+        }
         return false;
     }
     
+    if (!appState.visionMode.isActive) {
+        console.warn('⚠️ Screenshots can only be taken in vision mode - use Alt+V to enter vision mode first');
+        if (window.presetManager) {
+            presetManager.showErrorNotification('Enter vision mode first (Alt+V) before taking screenshots');
+        } else {
+            alert('Enter vision mode first (Alt+V) before taking screenshots');
+        }
+        return false;
+    }
+    
+    console.log('📸 Taking screenshot via global hotkey');
     return await screenshotService.captureScreenshot();
 }
 
 async function processScreenshots() {
-    if (!appState.visionMode.isActive) {
-        console.warn('⚠️ Screenshots can only be processed in vision mode');
+    console.log('🎮 processScreenshots called (could be from global hotkey)');
+    
+    // Check if we're in interview mode
+    if (!isLiveInterviewActive()) {
+        console.warn('⚠️ Screenshot processing only available during live interview');
+        if (window.presetManager) {
+            presetManager.showErrorNotification('Start the interview first before processing screenshots');
+        } else {
+            alert('Please start the interview before processing screenshots');
+        }
         return false;
     }
     
+    if (!appState.visionMode.isActive) {
+        console.warn('⚠️ Screenshots can only be processed in vision mode - use Alt+V to enter vision mode first');
+        if (window.presetManager) {
+            presetManager.showErrorNotification('Enter vision mode first (Alt+V) before processing screenshots');
+        } else {
+            alert('Enter vision mode first (Alt+V) before processing screenshots');
+        }
+        return false;
+    }
+    
+    console.log('🔄 Processing screenshots via global hotkey');
     return await screenshotService.processQueue();
 }
 

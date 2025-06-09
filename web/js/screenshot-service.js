@@ -404,7 +404,7 @@ class ScreenshotService {
             };
             
             this.addToQueue(screenshot);
-            this.showNotification('📸 Screenshot Captured', `Added to queue (${this.screenshotQueue.length}/${this.maxScreenshots})`, 'success');
+            this.showNotification('📸 Screenshot Captured (Global)', `Added to queue (${this.screenshotQueue.length}/${this.maxScreenshots}) - Alt+P to process`, 'success');
             
             return true;
             
@@ -646,8 +646,8 @@ Focus on being educational and helping understand both the solution and the unde
         indicator.className = 'vision-mode-indicator';
         indicator.innerHTML = `
             <div class="vision-mode-content">
-                <h3>👁️ Vision Mode Active</h3>
-                <p>Ready to capture and analyze screenshots</p>
+                <h3>👁️ Vision Mode Active (Global)</h3>
+                <p>Ready to capture and analyze screenshots anywhere!</p>
                 <div class="vision-hotkeys">
                     <div class="vision-hotkey">
                         <kbd>Alt+S</kbd>
@@ -662,15 +662,18 @@ Focus on being educational and helping understand both the solution and the unde
                         <span>Exit Vision</span>
                     </div>
                 </div>
+                <p style="font-size: 11px; opacity: 0.8; margin-top: 10px;">
+                    🌍 Works globally - no need to focus this app!
+                </p>
             </div>
         `;
         
         document.body.appendChild(indicator);
         
-        // Auto-hide after 3 seconds
+        // Auto-hide after 4 seconds (bit longer for global message)
         setTimeout(() => {
             this.hideVisionModeIndicator();
-        }, 3000);
+        }, 4000);
     }
     
     hideVisionModeIndicator() {
