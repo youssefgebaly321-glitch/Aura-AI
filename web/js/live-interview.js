@@ -372,11 +372,17 @@ class LiveInterviewUI {
         this.currentAIElement = this.createMessageElement(response, 'ai-response');
         this.conversationStream.appendChild(this.currentAIElement);
 
-        this.setScrollMode('ai_start', this.currentAIElement);
+        // Use ai_streaming mode to prevent forced scrolling
+        this.setScrollMode('ai_streaming', this.currentAIElement);
 
         this.startStreaming(this.currentAIElement, response, true, () => {
-            // On completion, set mode back to ready for live speech
-            this.setScrollMode('live_bottom');
+            // On completion, stay in current position - don't force scroll
+            // Only set to live_bottom if user is already at bottom
+            if (this.isUserNearBottom()) {
+                this.setScrollMode('live_bottom');
+            } else {
+                this.setScrollMode('ai_static');
+            }
         });
         
         this.hideActivity();
@@ -395,11 +401,17 @@ class LiveInterviewUI {
         const visionElement = this.createVisionAnalysisElement(analysis, metadata);
         this.conversationStream.appendChild(visionElement);
 
-        this.setScrollMode('ai_start', visionElement);
+        // Use ai_streaming mode to prevent forced scrolling
+        this.setScrollMode('ai_streaming', visionElement);
 
         this.startStreaming(visionElement, analysis, true, () => {
-            // On completion, set mode back to ready for live speech
-            this.setScrollMode('live_bottom');
+            // On completion, stay in current position - don't force scroll
+            // Only set to live_bottom if user is already at bottom
+            if (this.isUserNearBottom()) {
+                this.setScrollMode('live_bottom');
+            } else {
+                this.setScrollMode('ai_static');
+            }
             console.log('🎭 Vision analysis streaming completed');
         });
         
@@ -412,7 +424,12 @@ class LiveInterviewUI {
         const messageElement = this.createMessageElement(content, type);
         this.conversationStream.appendChild(messageElement);
         this.startStreaming(messageElement, content);
-        this.scrollToBottom();
+        
+        // Only auto-scroll if user is near bottom, otherwise respect their position
+        if (this.isUserNearBottom()) {
+            this.scrollToBottom();
+        }
+        
         this.updateEmptyState();
     }
 
@@ -599,10 +616,11 @@ class LiveInterviewUI {
         this.isStreaming = true;
 
         const scrollCallback = () => {
-            // Only auto-scroll during live speech streaming
+            // Only auto-scroll during live speech streaming, not during AI responses
             if (this.scrollState.mode === 'live_bottom') {
                 this.scrollToBottom();
             }
+            // Don't scroll during ai_streaming or ai_static modes
         };
 
         this.streaming.streamContent(contentDiv, content, speed, scrollCallback).then(() => {
@@ -673,6 +691,16 @@ class LiveInterviewUI {
                 // but we mark that new content is pending
                 this.scrollState.newContentPending = true;
                 this.showResumeScrollButton();
+                break;
+            case 'ai_streaming':
+                // ai_streaming mode doesn't auto-scroll - lets user stay where they are
+                // Just store the element reference for potential future use
+                if (targetElement) {
+                    this.scrollState.aiResponseStartElement = targetElement;
+                }
+                break;
+            case 'ai_static':
+                // ai_static mode doesn't auto-scroll - AI response completed, maintain position
                 break;
         }
     }
@@ -801,6 +829,15 @@ class LiveInterviewUI {
             streaming: this.streaming.getConfig(),
             transparency: this.controls.getConfig()
         };
+    }
+
+    isUserNearBottom() {
+        if (this.conversationStream) {
+            const { scrollTop, scrollHeight, clientHeight } = this.conversationStream;
+            const maxScrollTop = scrollHeight - clientHeight;
+            return scrollTop >= maxScrollTop - this.scrollState.bottomThreshold;
+        }
+        return false;
     }
 }
 
