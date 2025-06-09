@@ -3,6 +3,7 @@ import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from services.llm_service import MultiLLMManager, verify_provider_connection
 from services.stt_service import verify_deepgram_api_key, DeepgramManager
+from services.vision_service import vision_service, verify_vision_provider_connection
 
 router = APIRouter()
 
@@ -198,6 +199,13 @@ async def websocket_endpoint(websocket: WebSocket):
                             "health_status": health_results
                         })
                         
+                        # Initialize vision service
+                        vision_initialized = vision_service.load_vision_providers()
+                        if vision_initialized:
+                            print("✅ Vision service initialized successfully")
+                        else:
+                            print("⚠️ No vision providers available")
+                        
                         # Start Deepgram manager
                         dg_manager = DeepgramManager(on_transcript)
                         await dg_manager.start()
@@ -266,6 +274,65 @@ async def websocket_endpoint(websocket: WebSocket):
                             await send_json(websocket, "error", {"message": f"Error getting system status: {str(e)}"})
                     else:
                         await send_json(websocket, "error", {"message": "AI providers not initialized"})
+                        
+                elif data['type'] == 'vision_analysis':
+                    # Handle vision analysis requests
+                    payload = data.get('payload', {})
+                    
+                    try:
+                        prompt = payload.get('prompt', '')
+                        screenshots = payload.get('screenshots', [])
+                        vision_config = payload.get('visionConfig', {})
+                        languages = payload.get('languages', [])
+                        
+                        if not screenshots:
+                            await send_json(websocket, "vision_analysis_result", {
+                                "success": False,
+                                "error": "No screenshots provided for analysis"
+                            })
+                            continue
+                        
+                        if not vision_config or not vision_config.get('provider') or not vision_config.get('model'):
+                            await send_json(websocket, "vision_analysis_result", {
+                                "success": False,
+                                "error": "Vision provider configuration missing"
+                            })
+                            continue
+                        
+                        print(f"🔍 Processing vision analysis request:")
+                        print(f"   Provider: {vision_config['provider']}")
+                        print(f"   Model: {vision_config['model']}")
+                        print(f"   Screenshots: {len(screenshots)}")
+                        print(f"   Languages: {languages}")
+                        
+                        # Perform vision analysis
+                        analysis, result_info = await vision_service.analyze_coding_problem(
+                            provider_name=vision_config['provider'],
+                            model_name=vision_config['model'],
+                            screenshots=screenshots,
+                            languages=languages
+                        )
+                        
+                        # Send result back to client
+                        await send_json(websocket, "vision_analysis_result", {
+                            "success": result_info.get("success", False),
+                            "analysis": analysis,
+                            "metadata": result_info,
+                            "screenshot_count": len(screenshots),
+                            "languages": languages
+                        })
+                        
+                        if result_info.get("success"):
+                            print(f"✅ Vision analysis completed successfully")
+                        else:
+                            print(f"❌ Vision analysis failed: {result_info.get('error', 'Unknown error')}")
+                            
+                    except Exception as e:
+                        print(f"❌ CRITICAL: Error processing vision analysis: {e}")
+                        await send_json(websocket, "vision_analysis_result", {
+                            "success": False,
+                            "error": f"Vision analysis processing failed: {str(e)}"
+                        })
                 elif data['type'] == 'audio_chunk':
                     if dg_manager:
                         # If universally muted, do not process audio chunks

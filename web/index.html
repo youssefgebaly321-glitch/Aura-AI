@@ -84,6 +84,50 @@
             </fieldset>
 
             <fieldset>
+                <legend>Vision AI Configuration (Optional)</legend>
+                <div class="vision-config-section">
+                    <div class="vision-config-main">
+                        <h4>Vision Model for Screenshots & Code Analysis</h4>
+                        <div class="ai-config-group">
+                            <select id="vision-provider-select">
+                                <option value="">Select Vision Provider (Optional)</option>
+                            </select>
+                            <select id="vision-model-select" disabled>
+                                <option value="">Select Vision Model</option>
+                            </select>
+                        </div>
+                        <small class="config-hint">Vision models can analyze screenshots of coding problems and provide solutions</small>
+                    </div>
+                    
+                    <div class="programming-languages">
+                        <h4>Preferred Programming Languages</h4>
+                        <div class="language-selector">
+                            <div class="checkbox-group">
+                                <label><input type="checkbox" name="language" value="python"> Python</label>
+                                <label><input type="checkbox" name="language" value="javascript"> JavaScript</label>
+                                <label><input type="checkbox" name="language" value="java"> Java</label>
+                                <label><input type="checkbox" name="language" value="cpp"> C++</label>
+                                <label><input type="checkbox" name="language" value="csharp"> C#</label>
+                                <label><input type="checkbox" name="language" value="go"> Go</label>
+                                <label><input type="checkbox" name="language" value="rust"> Rust</label>
+                                <label><input type="checkbox" name="language" value="typescript"> TypeScript</label>
+                            </div>
+                        </div>
+                        <small class="config-hint">Select languages for code solutions and explanations</small>
+                    </div>
+                    
+                    <div class="vision-hotkeys-info">
+                        <h4>Vision Mode Hotkeys</h4>
+                        <div class="hotkey-list">
+                            <span class="hotkey-item"><kbd>Alt+V</kbd> Toggle Vision Mode</span>
+                            <span class="hotkey-item"><kbd>Alt+S</kbd> Take Screenshot</span>
+                            <span class="hotkey-item"><kbd>Alt+P</kbd> Process Screenshots</span>
+                        </div>
+                    </div>
+                </div>
+            </fieldset>
+
+            <fieldset>
                 <legend>Job Description / Requirements</legend>
                 <textarea id="user-objectives" placeholder="Paste the job description or key requirements here to give the AI context."></textarea>
             </fieldset>
@@ -103,6 +147,7 @@
                 <div class="check-item" id="check-deepgram"><span class="indicator">⚪</span> Deepgram API</div>
                 <div class="check-item" id="check-ai-provider"><span class="indicator">⚪</span> Primary AI Provider</div>
                 <div class="check-item" id="check-ai-secondary-provider" style="display: none;"><span class="indicator">⚪</span> Secondary AI Provider</div>
+                <div class="check-item" id="check-vision-provider" style="display: none;"><span class="indicator">⚪</span> Vision AI Provider</div>
             </div>
             <div class="preflight-buttons">
                 <button id="back-to-onboarding-btn">Back</button>
@@ -147,6 +192,7 @@
     </div>
 
     <script type="module" src="/static/js/preset-manager.js"></script>
+    <script type="module" src="/static/js/screenshot-service.js"></script>
     <script type="module" src="/static/js/main.js"></script>
 
 </body>

@@ -9,6 +9,7 @@ import { loadConfig, isDev, devLog, devWarn, devError } from './config.js';
 import liveInterviewUI from './live-interview.js';
 import hotkeyManager from './hotkeys.js';
 import presetManager from './preset-manager.js';
+import screenshotService from './screenshot-service.js';
 
 // --- State Management ---
 const appState = {
@@ -23,9 +24,19 @@ const appState = {
         name: null,
         model: null,
     },
+    selectedVisionProvider: {
+        name: null,
+        model: null,
+    },
+    selectedLanguages: [],
     currentPreset: null,
     availablePresets: [],
-    systemStatus: null
+    systemStatus: null,
+    visionMode: {
+        isActive: false,
+        screenshotQueue: [],
+        maxScreenshots: 4
+    }
 };
 
 // --- DOM Elements ---
@@ -46,6 +57,9 @@ const onboardingForm = {
     modelSelect: document.getElementById('ai-model-select'),
     secondaryProviderSelect: document.getElementById('ai-secondary-provider-select'),
     secondaryModelSelect: document.getElementById('ai-secondary-model-select'),
+    visionProviderSelect: document.getElementById('vision-provider-select'),
+    visionModelSelect: document.getElementById('vision-model-select'),
+    languageCheckboxes: document.querySelectorAll('input[name="language"]'),
 };
 
 const checks = {
@@ -55,6 +69,7 @@ const checks = {
     deepgram: document.getElementById('check-deepgram'),
     aiProvider: document.getElementById('check-ai-provider'),
     aiSecondaryProvider: document.getElementById('check-ai-secondary-provider'),
+    visionProvider: document.getElementById('check-vision-provider'),
 };
 
 const micSelect = document.getElementById('mic-select');
@@ -151,6 +166,25 @@ function handleOnboarding() {
     appState.selectedSecondaryProvider.name = secondaryProvider || null;
     appState.selectedSecondaryProvider.model = secondaryModel || null;
 
+    // Vision provider validation (optional)
+    const visionProvider = onboardingForm.visionProviderSelect.value;
+    const visionModel = onboardingForm.visionModelSelect.value;
+    
+    if ((visionProvider && !visionModel) || (!visionProvider && visionModel)) {
+        alert('If you select a vision provider, you must also select a vision model (or leave both empty).');
+        return;
+    }
+
+    appState.selectedVisionProvider.name = visionProvider || null;
+    appState.selectedVisionProvider.model = visionModel || null;
+
+    // Programming languages selection
+    const selectedLanguages = Array.from(onboardingForm.languageCheckboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+    
+    appState.selectedLanguages = selectedLanguages;
+
     devLog("Onboarding data captured:", appState);
     switchView('preflight');
     runPreFlightChecks();
@@ -181,6 +215,15 @@ async function runPreFlightChecks() {
         devLog('No secondary provider selected, skipping verification');
     }
 
+    // 4. Show vision provider check if selected
+    if (appState.selectedVisionProvider.name && appState.selectedVisionProvider.model) {
+        checks.visionProvider.style.display = 'flex';
+        devLog('Vision provider selected, will verify during preflight');
+    } else {
+        checks.visionProvider.style.display = 'none';
+        devLog('No vision provider selected, skipping verification');
+    }
+
     // 4. AI Provider Checks
     await verifyAiProviders();
 }
@@ -202,6 +245,15 @@ async function verifyAiProviders() {
         );
     }
     
+    // Verify vision provider if selected (optional)
+    if (appState.selectedVisionProvider.name && appState.selectedVisionProvider.model) {
+        await verifyVisionProvider(
+            appState.selectedVisionProvider, 
+            checks.visionProvider, 
+            'Vision'
+        );
+    }
+    
     checkAllSystemsGo();
 }
 
@@ -211,6 +263,32 @@ async function verifyProvider(providerConfig, checkElement, providerType) {
     
     try {
         const response = await fetch('/api/verify-provider', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, model }),
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            updateCheckStatus(checkElement, 'success', `${providerType} ${name} (${model}) OK`);
+            devLog(`✅ ${providerType} provider verification successful:`, { name, model });
+        } else {
+            updateCheckStatus(checkElement, 'error', `${providerType} ${name} Connection Failed`);
+            console.error(`❌ ${providerType} provider verification failed:`, { name, model });
+        }
+    } catch (error) {
+        updateCheckStatus(checkElement, 'error', `${providerType} Provider Check Failed`);
+        console.error(`❌ ${providerType} provider check error:`, error);
+    }
+}
+
+async function verifyVisionProvider(providerConfig, checkElement, providerType) {
+    const { name, model } = providerConfig;
+    updateCheckStatus(checkElement, 'pending', `Checking ${providerType} ${name}...`);
+    
+    try {
+        const response = await fetch('/api/verify-vision-provider', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, model }),
@@ -341,6 +419,40 @@ function connectWebSocket() {
             // Handle system status updates
             appState.systemStatus = data.payload;
             devLog("System status update:", data.payload);
+        } else if (data.type === 'vision_analysis_result') {
+            // Handle vision analysis results
+            const result = data.payload;
+            
+            if (result.success) {
+                // Display analysis in conversation
+                if (window.liveInterviewUI) {
+                    liveInterviewUI.addVisionAnalysis(result.analysis, {
+                        screenshotCount: result.screenshot_count,
+                        model: result.metadata.model,
+                        provider: result.metadata.provider,
+                        languages: result.languages
+                    });
+                }
+                
+                // Notify screenshot service of successful processing
+                if (window.visionAnalysisResolver) {
+                    window.visionAnalysisResolver(result);
+                    window.visionAnalysisResolver = null;
+                }
+                
+                devLog("Vision analysis completed successfully:", result);
+            } else {
+                console.error("Vision analysis failed:", result.error);
+                
+                // Notify screenshot service of failed processing
+                if (window.visionAnalysisResolver) {
+                    window.visionAnalysisResolver({
+                        success: false,
+                        error: result.error
+                    });
+                    window.visionAnalysisResolver = null;
+                }
+            }
         } else if (data.type === 'error') {
             // Handle general errors
             console.error("WebSocket error:", data.payload);
@@ -373,6 +485,10 @@ function checkAllSystemsGo() {
         if (checks.aiSecondaryProvider.style.display !== 'none' && 
             checks.aiSecondaryProvider.querySelector('.indicator').textContent === '🟢') {
             verifiedProviders.push(`Secondary: ${appState.selectedSecondaryProvider.name}`);
+        }
+        if (checks.visionProvider.style.display !== 'none' && 
+            checks.visionProvider.querySelector('.indicator').textContent === '🟢') {
+            verifiedProviders.push(`Vision: ${appState.selectedVisionProvider.name}`);
         }
         
         devLog('✅ All verified providers:', verifiedProviders);
@@ -458,6 +574,18 @@ async function loadAiProviders() {
             secondaryProviderSelect.appendChild(option);
         });
 
+        // Populate vision provider dropdown (only providers that support vision)
+        const visionProviderSelect = onboardingForm.visionProviderSelect;
+        visionProviderSelect.innerHTML = '<option value="">Select Vision Provider (Optional)</option>';
+        appState.aiProviders
+            .filter(p => p.supportsVision && p.visionModels && p.visionModels.length > 0)
+            .forEach(p => {
+                const option = document.createElement('option');
+                option.value = p.name;
+                option.textContent = `${p.name} (Vision)`;
+                visionProviderSelect.appendChild(option);
+            });
+
         // Use requestAnimationFrame to ensure DOM is ready
         requestAnimationFrame(() => {
             setDefaultAIProvider();
@@ -530,6 +658,25 @@ function updateSecondaryModelDropdown() {
     }
 }
 
+function updateVisionModelDropdown() {
+    const providerName = onboardingForm.visionProviderSelect.value;
+    const provider = appState.aiProviders.find(p => p.name === providerName);
+    const modelSelect = onboardingForm.visionModelSelect;
+
+    modelSelect.innerHTML = '<option value="">Select Vision Model</option>';
+    modelSelect.disabled = true;
+
+    if (provider && provider.visionModels && provider.visionModels.length > 0) {
+        provider.visionModels.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model;
+            option.textContent = model;
+            modelSelect.appendChild(option);
+        });
+        modelSelect.disabled = false;
+    }
+}
+
 
 // --- Preset Switching Functions ---
 function switchPreset(presetKey) {
@@ -550,12 +697,80 @@ function getSystemStatus() {
 window.switchPreset = switchPreset;
 window.getSystemStatus = getSystemStatus;
 
+// --- Vision Mode Functions ---
+function toggleVisionMode() {
+    if (!appState.selectedVisionProvider.name || !appState.selectedVisionProvider.model) {
+        console.warn('⚠️ Vision mode requires a vision model to be configured');
+        if (window.presetManager) {
+            presetManager.showErrorNotification('Vision model not configured. Please set up a vision provider in onboarding.');
+        }
+        return false;
+    }
+    
+    appState.visionMode.isActive = !appState.visionMode.isActive;
+    
+    if (appState.visionMode.isActive) {
+        // Enable vision mode
+        screenshotService.setVisionConfig(
+            appState.selectedVisionProvider.name,
+            appState.selectedVisionProvider.model
+        );
+        screenshotService.setProgrammingLanguages(appState.selectedLanguages);
+        screenshotService.showVisionMode(true);
+        
+        // Pause audio processing when entering vision mode
+        if (window.muteManager) {
+            muteManager.setUniversalMute(true);
+        }
+        
+        devLog('👁️ Vision mode activated');
+        console.log('👁️ Vision mode activated - Audio processing paused');
+    } else {
+        // Disable vision mode
+        screenshotService.showVisionMode(false);
+        
+        // Resume audio processing when exiting vision mode
+        if (window.muteManager) {
+            muteManager.setUniversalMute(false);
+        }
+        
+        devLog('👁️ Vision mode deactivated');
+        console.log('👁️ Vision mode deactivated - Audio processing resumed');
+    }
+    
+    return appState.visionMode.isActive;
+}
+
+async function captureScreenshot() {
+    if (!appState.visionMode.isActive) {
+        console.warn('⚠️ Screenshots can only be taken in vision mode');
+        return false;
+    }
+    
+    return await screenshotService.captureScreenshot();
+}
+
+async function processScreenshots() {
+    if (!appState.visionMode.isActive) {
+        console.warn('⚠️ Screenshots can only be processed in vision mode');
+        return false;
+    }
+    
+    return await screenshotService.processQueue();
+}
+
+// Make vision functions globally accessible
+window.toggleVisionMode = toggleVisionMode;
+window.captureScreenshot = captureScreenshot;
+window.processScreenshots = processScreenshots;
+
 // --- Event Listeners ---
 proceedButton.addEventListener('click', handleOnboarding);
 startButton.addEventListener('click', startInterview);
 backButton.addEventListener('click', () => switchView('onboarding'));
 onboardingForm.providerSelect.addEventListener('change', updateModelDropdown);
 onboardingForm.secondaryProviderSelect.addEventListener('change', updateSecondaryModelDropdown);
+onboardingForm.visionProviderSelect.addEventListener('change', updateVisionModelDropdown);
 
 window.addEventListener('DOMContentLoaded', async () => {
     await loadConfig();
@@ -585,7 +800,7 @@ function setupDeveloperShortcuts() {
 }
 
 function setupPresetHotkeys() {
-    devLog('🎹 Setting up preset switching hotkeys');
+    devLog('🎹 Setting up preset switching and vision hotkeys');
     document.addEventListener('keydown', (e) => {
         // Only work during live interview and if not focusing on input fields
         if (!e.target.matches('input, textarea, select') && isLiveInterviewActive()) {
@@ -605,6 +820,21 @@ function setupPresetHotkeys() {
                         e.preventDefault(); 
                         switchPreset('auto');
                         devLog('🔄 Hotkey: Auto-selecting best preset');
+                        break;
+                    case 'v':
+                        e.preventDefault();
+                        toggleVisionMode();
+                        devLog('👁️ Hotkey: Toggling vision mode');
+                        break;
+                    case 's':
+                        e.preventDefault();
+                        captureScreenshot();
+                        devLog('📸 Hotkey: Capturing screenshot');
+                        break;
+                    case 'p':
+                        e.preventDefault();
+                        processScreenshots();
+                        devLog('🔄 Hotkey: Processing screenshots');
                         break;
                 }
             }

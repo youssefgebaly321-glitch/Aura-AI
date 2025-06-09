@@ -383,6 +383,22 @@ class LiveInterviewUI {
         this.updateEmptyState();
     }
 
+    // Add vision analysis response
+    addVisionAnalysis(analysis, metadata = {}) {
+        const visionElement = this.createVisionAnalysisElement(analysis, metadata);
+        this.conversationStream.appendChild(visionElement);
+
+        this.setScrollMode('ai_start', visionElement);
+
+        this.startStreaming(visionElement, analysis, true, () => {
+            // On completion, set mode back to ready for live speech
+            this.setScrollMode('live_bottom');
+        });
+        
+        this.hideActivity();
+        this.updateEmptyState();
+    }
+
     // Add message to conversation
     addMessage(content, type) {
         const messageElement = this.createMessageElement(content, type);
@@ -408,6 +424,163 @@ class LiveInterviewUI {
         messageDiv.appendChild(contentDiv);
         
         return messageDiv;
+    }
+
+    // Create vision analysis element with enhanced styling
+    createVisionAnalysisElement(content, metadata = {}) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message ai-response vision-analysis';
+        
+        // Create header with vision-specific information
+        const headerDiv = document.createElement('div');
+        headerDiv.className = 'vision-header';
+        
+        const label = document.createElement('span');
+        label.className = 'label';
+        label.innerHTML = '👁️ Vision AI Analysis';
+        
+        const metaInfo = document.createElement('div');
+        metaInfo.className = 'vision-meta';
+        
+        let metaText = '';
+        if (metadata.provider && metadata.model) {
+            metaText += `${metadata.provider} - ${metadata.model}`;
+        }
+        if (metadata.screenshotCount) {
+            metaText += ` • ${metadata.screenshotCount} screenshot${metadata.screenshotCount > 1 ? 's' : ''}`;
+        }
+        if (metadata.languages && metadata.languages.length > 0) {
+            metaText += ` • ${metadata.languages.join(', ')}`;
+        }
+        
+        metaInfo.textContent = metaText;
+        
+        headerDiv.appendChild(label);
+        headerDiv.appendChild(metaInfo);
+        
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'streaming-text vision-content';
+        
+        messageDiv.appendChild(headerDiv);
+        messageDiv.appendChild(contentDiv);
+        
+        // Add vision-specific styling if not already present
+        this.addVisionStyles();
+        
+        return messageDiv;
+    }
+
+    // Add CSS styles for vision analysis elements
+    addVisionStyles() {
+        if (!document.getElementById('vision-analysis-styles')) {
+            const style = document.createElement('style');
+            style.id = 'vision-analysis-styles';
+            style.textContent = `
+                .message.vision-analysis {
+                    border-left: 4px solid #6366f1;
+                    background: linear-gradient(135deg, rgba(99, 102, 241, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
+                }
+                
+                .vision-header {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    margin-bottom: 12px;
+                    padding-bottom: 8px;
+                    border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+                }
+                
+                .vision-header .label {
+                    color: #6366f1;
+                    font-weight: 600;
+                    font-size: 14px;
+                }
+                
+                .vision-meta {
+                    font-size: 11px;
+                    color: #64748b;
+                    font-weight: 500;
+                    text-align: right;
+                }
+                
+                .vision-content {
+                    line-height: 1.6;
+                }
+                
+                .vision-content h1,
+                .vision-content h2,
+                .vision-content h3 {
+                    color: #6366f1;
+                    margin-top: 20px;
+                    margin-bottom: 10px;
+                }
+                
+                .vision-content h1 {
+                    font-size: 18px;
+                    border-bottom: 2px solid rgba(99, 102, 241, 0.3);
+                    padding-bottom: 5px;
+                }
+                
+                .vision-content h2 {
+                    font-size: 16px;
+                }
+                
+                .vision-content h3 {
+                    font-size: 14px;
+                }
+                
+                .vision-content code {
+                    background: rgba(99, 102, 241, 0.1);
+                    padding: 2px 6px;
+                    border-radius: 3px;
+                    font-family: 'Fira Code', 'Monaco', 'Consolas', monospace;
+                    font-size: 13px;
+                }
+                
+                .vision-content pre {
+                    background: rgba(15, 23, 42, 0.95);
+                    border: 1px solid rgba(99, 102, 241, 0.3);
+                    border-radius: 6px;
+                    padding: 16px;
+                    margin: 12px 0;
+                    overflow-x: auto;
+                    position: relative;
+                }
+                
+                .vision-content pre code {
+                    background: none;
+                    padding: 0;
+                    color: #e2e8f0;
+                    font-size: 13px;
+                    line-height: 1.5;
+                }
+                
+                .vision-content ul,
+                .vision-content ol {
+                    margin: 12px 0;
+                    padding-left: 20px;
+                }
+                
+                .vision-content li {
+                    margin: 6px 0;
+                    line-height: 1.5;
+                }
+                
+                .vision-content strong {
+                    color: #6366f1;
+                    font-weight: 600;
+                }
+                
+                .vision-content blockquote {
+                    border-left: 3px solid #6366f1;
+                    margin: 16px 0;
+                    padding: 12px 16px;
+                    background: rgba(99, 102, 241, 0.05);
+                    border-radius: 0 4px 4px 0;
+                }
+            `;
+            document.head.appendChild(style);
+        }
     }
 
     // Start streaming animation (delegated to streaming module)

@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from core.config import settings
 import window_manager
 from services.llm_service import verify_provider_connection
+from services.vision_service import verify_vision_provider_connection
 
 router = APIRouter()
 
@@ -43,7 +44,10 @@ async def get_ai_providers():
         client_safe_providers = [
             {
                 "name": p.get("name"),
-                "models": p.get("models", [])
+                "models": p.get("models", []),
+                "visionModels": p.get("visionModels", []),
+                "supportsVision": p.get("supportsVision", False),
+                "default": p.get("default", False)
             }
             for p in providers
         ]
@@ -76,6 +80,36 @@ async def verify_ai_provider(request: ProviderVerifyRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to verify provider: {e}")
+
+@router.post("/api/verify-vision-provider")
+async def verify_vision_ai_provider(request: ProviderVerifyRequest):
+    """
+    Verifies a connection to the selected vision AI provider.
+    """
+    try:
+        with open("ai_providers.json", "r") as f:
+            providers = json.load(f)
+        
+        provider_config = next((p for p in providers if p["name"] == request.name), None)
+
+        if not provider_config:
+            raise HTTPException(status_code=404, detail=f"Provider '{request.name}' not found.")
+
+        if not provider_config.get("supportsVision", False):
+            raise HTTPException(status_code=400, detail=f"Provider '{request.name}' does not support vision.")
+
+        if request.model not in provider_config.get("visionModels", []):
+            raise HTTPException(status_code=400, detail=f"Model '{request.model}' is not a vision model for '{request.name}'.")
+
+        is_valid = await verify_vision_provider_connection(
+            base_url=provider_config.get("baseURL"),
+            api_key=provider_config.get("apiKey"),
+            model_name=request.model
+        )
+        return {"success": is_valid}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to verify vision provider: {e}")
 
 @router.get("/api/transparency")
 async def get_transparency():
