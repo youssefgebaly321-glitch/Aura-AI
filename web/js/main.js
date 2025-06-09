@@ -29,6 +29,10 @@ const appState = {
         name: null,
         model: null,
     },
+    selectedSecondaryVisionProvider: {
+        name: null,
+        model: null,
+    },
     selectedLanguages: [],
     currentPreset: null,
     availablePresets: [],
@@ -36,7 +40,10 @@ const appState = {
     visionMode: {
         isActive: false,
         screenshotQueue: [],
-        maxScreenshots: 4
+        maxScreenshots: 4,
+        currentVisionProvider: 'primary', // 'primary' or 'secondary'
+        lastSwitchTime: 0,
+        switchCooldown: 1000 // 1 second cooldown between switches
     }
 };
 
@@ -60,6 +67,8 @@ const onboardingForm = {
     secondaryModelSelect: document.getElementById('ai-secondary-model-select'),
     visionProviderSelect: document.getElementById('vision-provider-select'),
     visionModelSelect: document.getElementById('vision-model-select'),
+    visionSecondaryProviderSelect: document.getElementById('vision-secondary-provider-select'),
+    visionSecondaryModelSelect: document.getElementById('vision-secondary-model-select'),
     languageCheckboxes: document.querySelectorAll('input[name="language"]'),
 };
 
@@ -71,6 +80,7 @@ const checks = {
     aiProvider: document.getElementById('check-ai-provider'),
     aiSecondaryProvider: document.getElementById('check-ai-secondary-provider'),
     visionProvider: document.getElementById('check-vision-provider'),
+    visionSecondaryProvider: document.getElementById('check-vision-secondary-provider'),
 };
 
 const micSelect = document.getElementById('mic-select');
@@ -179,6 +189,18 @@ function handleOnboarding() {
     appState.selectedVisionProvider.name = visionProvider || null;
     appState.selectedVisionProvider.model = visionModel || null;
 
+    // Secondary vision provider validation (optional)
+    const secondaryVisionProvider = onboardingForm.visionSecondaryProviderSelect.value;
+    const secondaryVisionModel = onboardingForm.visionSecondaryModelSelect.value;
+    
+    if ((secondaryVisionProvider && !secondaryVisionModel) || (!secondaryVisionProvider && secondaryVisionModel)) {
+        alert('If you select a secondary vision provider, you must also select a secondary vision model (or leave both empty).');
+        return;
+    }
+
+    appState.selectedSecondaryVisionProvider.name = secondaryVisionProvider || null;
+    appState.selectedSecondaryVisionProvider.model = secondaryVisionModel || null;
+
     // Programming languages selection
     const selectedLanguages = Array.from(onboardingForm.languageCheckboxes)
         .filter(cb => cb.checked)
@@ -216,13 +238,22 @@ async function runPreFlightChecks() {
         devLog('No secondary provider selected, skipping verification');
     }
 
-    // 4. Show vision provider check if selected
+    // 4. Show vision provider checks if selected
     if (appState.selectedVisionProvider.name && appState.selectedVisionProvider.model) {
         checks.visionProvider.style.display = 'flex';
-        devLog('Vision provider selected, will verify during preflight');
+        devLog('Primary vision provider selected, will verify during preflight');
     } else {
         checks.visionProvider.style.display = 'none';
-        devLog('No vision provider selected, skipping verification');
+        devLog('No primary vision provider selected, skipping verification');
+    }
+
+    // 5. Show secondary vision provider check if selected
+    if (appState.selectedSecondaryVisionProvider.name && appState.selectedSecondaryVisionProvider.model) {
+        checks.visionSecondaryProvider.style.display = 'flex';
+        devLog('Secondary vision provider selected, will verify during preflight');
+    } else {
+        checks.visionSecondaryProvider.style.display = 'none';
+        devLog('No secondary vision provider selected, skipping verification');
     }
 
     // 4. AI Provider Checks
@@ -251,7 +282,16 @@ async function verifyAiProviders() {
         await verifyVisionProvider(
             appState.selectedVisionProvider, 
             checks.visionProvider, 
-            'Vision'
+            'Primary Vision'
+        );
+    }
+    
+    // Verify secondary vision provider if selected (optional)
+    if (appState.selectedSecondaryVisionProvider.name && appState.selectedSecondaryVisionProvider.model) {
+        await verifyVisionProvider(
+            appState.selectedSecondaryVisionProvider, 
+            checks.visionSecondaryProvider, 
+            'Secondary Vision'
         );
     }
     
@@ -553,6 +593,14 @@ async function startInterview() {
         interviewPayload.aiSecondaryProvider = appState.selectedSecondaryProvider;
     }
     
+    // Add vision providers if selected
+    if (appState.selectedVisionProvider.name && appState.selectedVisionProvider.model) {
+        interviewPayload.visionProvider = appState.selectedVisionProvider;
+    }
+    if (appState.selectedSecondaryVisionProvider.name && appState.selectedSecondaryVisionProvider.model) {
+        interviewPayload.visionSecondaryProvider = appState.selectedSecondaryVisionProvider;
+    }
+    
     sendSocketMessage('start_interview', interviewPayload);
 }
 
@@ -603,6 +651,18 @@ async function loadAiProviders() {
                 option.value = p.name;
                 option.textContent = `${p.name} (Vision)`;
                 visionProviderSelect.appendChild(option);
+            });
+
+        // Populate secondary vision provider dropdown
+        const visionSecondaryProviderSelect = onboardingForm.visionSecondaryProviderSelect;
+        visionSecondaryProviderSelect.innerHTML = '<option value="">Select Secondary Vision Provider (Optional)</option>';
+        appState.aiProviders
+            .filter(p => p.supportsVision && p.visionModels && p.visionModels.length > 0)
+            .forEach(p => {
+                const option = document.createElement('option');
+                option.value = p.name;
+                option.textContent = `${p.name} (Vision)`;
+                visionSecondaryProviderSelect.appendChild(option);
             });
 
         // Use requestAnimationFrame to ensure DOM is ready
@@ -683,6 +743,25 @@ function updateVisionModelDropdown() {
     const modelSelect = onboardingForm.visionModelSelect;
 
     modelSelect.innerHTML = '<option value="">Select Vision Model</option>';
+    modelSelect.disabled = true;
+
+    if (provider && provider.visionModels && provider.visionModels.length > 0) {
+        provider.visionModels.forEach(model => {
+            const option = document.createElement('option');
+            option.value = model;
+            option.textContent = model;
+            modelSelect.appendChild(option);
+        });
+        modelSelect.disabled = false;
+    }
+}
+
+function updateSecondaryVisionModelDropdown() {
+    const providerName = onboardingForm.visionSecondaryProviderSelect.value;
+    const provider = appState.aiProviders.find(p => p.name === providerName);
+    const modelSelect = onboardingForm.visionSecondaryModelSelect;
+
+    modelSelect.innerHTML = '<option value="">Select Secondary Vision Model</option>';
     modelSelect.disabled = true;
 
     if (provider && provider.visionModels && provider.visionModels.length > 0) {
@@ -794,6 +873,12 @@ function getSystemStatus() {
 window.switchPreset = switchPreset;
 window.getSystemStatus = getSystemStatus;
 
+// Make vision functions globally accessible
+window.switchVisionModel = switchVisionModel;
+
+// Make appState globally accessible for context-aware commands
+window.appState = appState;
+
 // Make screen capture functions globally accessible
 window.getScreenVideoTrack = getScreenVideoTrack;
 window.isScreenSharingAvailable = isScreenSharingAvailable;
@@ -801,6 +886,65 @@ window.isScreenSharingAvailable = isScreenSharingAvailable;
 // --- Vision Mode Functions ---
 let lastVisionToggleTime = 0;
 const visionToggleCooldown = 500; // 500ms cooldown
+
+function switchVisionModel() {
+    devLog('🔄 switchVisionModel called');
+
+    if (!isLiveInterviewActive()) {
+        const msg = 'Vision model can only be switched during a live interview.';
+        devWarn(msg);
+        if (window.presetManager) presetManager.showErrorNotification(msg);
+        return false;
+    }
+
+    if (!appState.visionMode.isActive) {
+        const msg = 'Vision model switching is only available in Vision Mode (Alt+V).';
+        devWarn(msg);
+        if (window.presetManager) presetManager.showErrorNotification(msg);
+        return false;
+    }
+
+    const now = Date.now();
+    if (now - appState.visionMode.lastSwitchTime < appState.visionMode.switchCooldown) {
+        devLog('🔄 Vision model switch cooldown active, ignoring.');
+        return false;
+    }
+
+    // This is the key part to debug. Let's log what we have.
+    devLog('Checking for secondary vision provider. Current state:', {
+        primary: appState.selectedVisionProvider,
+        secondary: appState.selectedSecondaryVisionProvider
+    });
+
+    if (!appState.selectedSecondaryVisionProvider || !appState.selectedSecondaryVisionProvider.name || !appState.selectedSecondaryVisionProvider.model) {
+        const msg = 'No secondary vision model configured.';
+        devWarn(msg, 'Please select one in the onboarding screen.');
+        if (window.presetManager) presetManager.showErrorNotification(msg, 'Please select one on the onboarding screen.');
+        return false;
+    }
+
+    appState.visionMode.lastSwitchTime = now;
+
+    const wasOnPrimary = appState.visionMode.currentVisionProvider === 'primary';
+    appState.visionMode.currentVisionProvider = wasOnPrimary ? 'secondary' : 'primary';
+
+    const currentProviderConfig = wasOnPrimary
+        ? appState.selectedSecondaryVisionProvider
+        : appState.selectedVisionProvider;
+
+    screenshotService.setVisionConfig(currentProviderConfig.name, currentProviderConfig.model);
+    screenshotService.updateQueueUI(); // Force UI update
+
+    const providerType = wasOnPrimary ? 'Secondary (2°)' : 'Primary (1°)';
+    const message = `Switched to ${providerType} Vision Model: ${currentProviderConfig.model}`;
+    
+    if (window.presetManager) {
+        presetManager.showSuccessNotification(message);
+    }
+    
+    devLog(`🔄 Switched to ${providerType} vision model:`, currentProviderConfig);
+    return true;
+}
 
 function toggleVisionMode() {
     console.log('🎮 toggleVisionMode called (could be from global hotkey)');
@@ -838,11 +982,12 @@ function toggleVisionMode() {
     appState.visionMode.isActive = !appState.visionMode.isActive;
     
     if (appState.visionMode.isActive) {
-        // Enable vision mode
-        screenshotService.setVisionConfig(
-            appState.selectedVisionProvider.name,
-            appState.selectedVisionProvider.model
-        );
+        // Enable vision mode with current vision provider
+        const currentProvider = appState.visionMode.currentVisionProvider === 'primary' 
+            ? appState.selectedVisionProvider 
+            : appState.selectedSecondaryVisionProvider;
+            
+        screenshotService.setVisionConfig(currentProvider.name, currentProvider.model);
         screenshotService.setProgrammingLanguages(appState.selectedLanguages);
         screenshotService.showVisionMode(true);
         
@@ -1063,6 +1208,7 @@ backButton.addEventListener('click', () => switchView('onboarding'));
 onboardingForm.providerSelect.addEventListener('change', updateModelDropdown);
 onboardingForm.secondaryProviderSelect.addEventListener('change', updateSecondaryModelDropdown);
 onboardingForm.visionProviderSelect.addEventListener('change', updateVisionModelDropdown);
+onboardingForm.visionSecondaryProviderSelect.addEventListener('change', updateSecondaryVisionModelDropdown);
 
 window.addEventListener('DOMContentLoaded', async () => {
     await loadConfig();
@@ -1112,6 +1258,11 @@ function setupPresetHotkeys() {
                         e.preventDefault(); 
                         switchPreset('auto');
                         devLog('🔄 Hotkey: Auto-selecting best preset');
+                        break;
+                    case 't':
+                        e.preventDefault();
+                        switchVisionModel();
+                        devLog('🔄 Hotkey: Switching vision model');
                         break;
                     case 'v':
                         e.preventDefault();

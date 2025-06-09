@@ -86,8 +86,8 @@
             <fieldset>
                 <legend>Vision AI Configuration (Optional)</legend>
                 <div class="vision-config-section">
-                    <div class="vision-config-main">
-                        <h4>Vision Model for Screenshots & Code Analysis</h4>
+                    <div class="vision-config-primary">
+                        <h4>Primary Vision Model (Default)</h4>
                         <div class="ai-config-group">
                             <select id="vision-provider-select">
                                 <option value="">Select Vision Provider (Optional)</option>
@@ -96,7 +96,20 @@
                                 <option value="">Select Vision Model</option>
                             </select>
                         </div>
-                        <small class="config-hint">Vision models can analyze screenshots of coding problems and provide solutions</small>
+                        <small class="config-hint">Primary vision model for screenshot analysis and code solutions</small>
+                    </div>
+                    
+                    <div class="vision-config-secondary">
+                        <h4>Secondary Vision Model (Optional)</h4>
+                        <div class="ai-config-group">
+                            <select id="vision-secondary-provider-select">
+                                <option value="">Select Secondary Vision Provider (Optional)</option>
+                            </select>
+                            <select id="vision-secondary-model-select" disabled>
+                                <option value="">Select Secondary Vision Model</option>
+                            </select>
+                        </div>
+                        <small class="config-hint">Switch to secondary vision model with Alt+T during vision mode</small>
                     </div>
                     
                     <div class="programming-languages">
@@ -123,6 +136,7 @@
                             <span class="hotkey-item"><kbd>Alt+V</kbd> Toggle Vision Mode</span>
                             <span class="hotkey-item"><kbd>Alt+S</kbd> Take Screenshot</span>
                             <span class="hotkey-item"><kbd>Alt+P</kbd> Process Screenshots</span>
+                            <span class="hotkey-item"><kbd>Alt+T</kbd> Switch Vision Model</span>
                         </div>
                     </div>
                 </div>
@@ -148,7 +162,8 @@
                 <div class="check-item" id="check-deepgram"><span class="indicator">⚪</span> Deepgram API</div>
                 <div class="check-item" id="check-ai-provider"><span class="indicator">⚪</span> Primary AI Provider</div>
                 <div class="check-item" id="check-ai-secondary-provider" style="display: none;"><span class="indicator">⚪</span> Secondary AI Provider</div>
-                <div class="check-item" id="check-vision-provider" style="display: none;"><span class="indicator">⚪</span> Vision AI Provider</div>
+                <div class="check-item" id="check-vision-provider" style="display: none;"><span class="indicator">⚪</span> Primary Vision AI Provider</div>
+                <div class="check-item" id="check-vision-secondary-provider" style="display: none;"><span class="indicator">⚪</span> Secondary Vision AI Provider</div>
             </div>
             <div class="preflight-buttons">
                 <button id="back-to-onboarding-btn">Back</button>

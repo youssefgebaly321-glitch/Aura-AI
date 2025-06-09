@@ -143,6 +143,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     payload = data.get('payload', {})
                     primary_provider_config = payload.get('aiProvider')
                     secondary_provider_config = payload.get('aiSecondaryProvider')
+                    primary_vision_config = payload.get('visionProvider')
+                    secondary_vision_config = payload.get('visionSecondaryProvider')
                     onboarding_context = payload.get('onboardingData', {})
                     session_state["is_muted"] = payload.get('is_muted', False)
                     session_state["process_all_speakers"] = payload.get('process_all_speakers', True)
@@ -192,6 +194,10 @@ async def websocket_endpoint(websocket: WebSocket):
                         print(f"   - Primary: {primary_provider_config.get('name')} - {primary_provider_config.get('model')}")
                         if secondary_provider_config:
                             print(f"   - Secondary: {secondary_provider_config.get('name')} - {secondary_provider_config.get('model')}")
+                        if primary_vision_config:
+                            print(f"   - Vision Primary: {primary_vision_config.get('name')} - {primary_vision_config.get('model')}")
+                        if secondary_vision_config:
+                            print(f"   - Vision Secondary: {secondary_vision_config.get('name')} - {secondary_vision_config.get('model')}")
                         print(f"🏥 Health Status: {health_results}")
                         
                         # Send initial preset information to frontend
@@ -203,11 +209,11 @@ async def websocket_endpoint(websocket: WebSocket):
                         })
                         
                         # Initialize vision service
-                        vision_initialized = vision_service.load_vision_providers()
-                        if vision_initialized:
-                            print("✅ Vision service initialized successfully")
-                        else:
-                            print("⚠️ No vision providers available")
+                        vision_service.load_vision_providers(
+                            primary_config=primary_vision_config,
+                            secondary_config=secondary_vision_config
+                        )
+                        print("✅ Vision service configured with selected providers")
                         
                         # Start Deepgram manager
                         dg_manager = DeepgramManager(on_transcript)

@@ -179,8 +179,9 @@ class VisionService:
     
     def __init__(self):
         self.vision_managers: Dict[str, VisionManager] = {}
+        self.active_vision_providers: Dict[str, VisionManager] = {}
         self.context_manager = None
-    
+
     def set_context_manager(self, context_manager):
         """Set the shared context manager for all vision managers"""
         self.context_manager = context_manager
@@ -188,46 +189,55 @@ class VisionService:
         for manager in self.vision_managers.values():
             manager.set_context_manager(context_manager)
         
-    def load_vision_providers(self) -> bool:
-        """Load available vision providers from configuration"""
+    def load_vision_providers(self, primary_config: Optional[Dict] = None, secondary_config: Optional[Dict] = None) -> bool:
+        """Load active vision providers based on user selection."""
+        self.active_vision_providers = {}
+        
+        if primary_config and primary_config.get('provider') and primary_config.get('model'):
+            manager = self._create_vision_manager(primary_config['provider'], primary_config['model'])
+            if manager:
+                self.active_vision_providers['primary'] = manager
+
+        if secondary_config and secondary_config.get('provider') and secondary_config.get('model'):
+            manager = self._create_vision_manager(secondary_config['provider'], secondary_config['model'])
+            if manager:
+                self.active_vision_providers['secondary'] = manager
+        
+        print(f"✅ VisionService configured with {len(self.active_vision_providers)} active vision models.")
+        return len(self.active_vision_providers) > 0
+
+    def _create_vision_manager(self, provider_name: str, model_name: str) -> Optional[VisionManager]:
+        """Create and return a vision manager for a given provider and model."""
         try:
             with open("ai_providers.json", "r") as f:
                 providers_config = json.load(f)
-            
-            vision_providers_loaded = 0
-            
+
             for provider_config in providers_config:
-                if provider_config.get("supportsVision") and provider_config.get("visionModels"):
-                    provider_name = provider_config["name"]
-                    
-                    # Create vision managers for each vision model
-                    for model_name in provider_config["visionModels"]:
-                        manager_key = f"{provider_name}_{model_name}"
-                        
-                        manager = VisionManager(
-                            provider_name=provider_name,
-                            base_url=provider_config["baseURL"],
-                            api_key=provider_config["apiKey"],
-                            model_name=model_name
-                        )
-                        # Set context manager if available
-                        if self.context_manager:
-                            manager.set_context_manager(self.context_manager)
-                        
-                        self.vision_managers[manager_key] = manager
-                        vision_providers_loaded += 1
-            
-            print(f"✅ VisionService initialized with {vision_providers_loaded} vision models")
-            return vision_providers_loaded > 0
-            
+                if provider_config["name"] == provider_name:
+                    manager = VisionManager(
+                        provider_name=provider_name,
+                        base_url=provider_config["baseURL"],
+                        api_key=provider_config["apiKey"],
+                        model_name=model_name
+                    )
+                    if self.context_manager:
+                        manager.set_context_manager(self.context_manager)
+                    return manager
+            return None
         except Exception as e:
-            print(f"❌ CRITICAL: Failed to load vision providers: {e}")
-            return False
+            print(f"❌ Failed to create vision manager for {provider_name}: {e}")
+            return None
     
     def get_vision_manager(self, provider_name: str, model_name: str) -> Optional[VisionManager]:
-        """Get a specific vision manager"""
-        manager_key = f"{provider_name}_{model_name}"
-        return self.vision_managers.get(manager_key)
+        """Get a specific vision manager, checking active providers first."""
+        # Check active providers first
+        for key, manager in self.active_vision_providers.items():
+            if manager.provider_name == provider_name and manager.model_name == model_name:
+                return manager
+        
+        # Fallback to creating a new one if not found in active
+        print(f"⚠️ Vision manager for {provider_name} - {model_name} not found in active providers. Creating on-the-fly.")
+        return self._create_vision_manager(provider_name, model_name)
     
     async def analyze_coding_problem(self, provider_name: str, model_name: str, 
                                    screenshots: List[str], languages: List[str] = None) -> Tuple[str, Dict[str, Any]]:

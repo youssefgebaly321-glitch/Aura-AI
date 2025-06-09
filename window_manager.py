@@ -698,7 +698,11 @@ class WindowManager:
 
         def on_auto_select():
             """Auto-select best available AI preset (Alt+E)"""
-            self.send_preset_switch_signal("auto")
+            self.send_context_aware_command("auto_select_preset")
+
+        def on_switch_vision_model():
+            """Switch vision model (Alt+T)"""
+            self.send_vision_switch_command("switch_vision_model")
 
         def on_transparency_transparent():
             """Set window to transparent (40% opacity) - Alt+1"""
@@ -733,7 +737,8 @@ class WindowManager:
             '<alt>+r': on_reset_screenshot_queue, # Reset screenshot queue
             '<alt>+q': on_switch_primary,      # Switch to primary preset
             '<alt>+w': on_switch_secondary,    # Switch to secondary preset  
-            '<alt>+e': on_auto_select,         # Auto-select best preset
+            '<alt>+e': on_auto_select,         # Auto-select best AI preset
+            '<alt>+t': on_switch_vision_model,   # Switch vision model
             '<alt>+m': on_toggle_mic_mute,     # Toggle microphone mute
             '<alt>+u': on_toggle_universal_mute, # Toggle universal mute (pause)
             '<alt>+1': on_transparency_transparent,  # 40% opacity (transparent)
@@ -798,6 +803,33 @@ class WindowManager:
         except Exception as e:
             print(f"❌ Error sending audio command: {e}")
 
+    def send_context_aware_command(self, command: str):
+        """Send command for context-aware actions like auto-selecting presets."""
+        try:
+            from datetime import datetime
+            print(f"🔄 Global hotkey triggered: {command}")
+            self._write_command_file({
+                "command": "context_aware_action",
+                "action": command,
+                "timestamp": datetime.now().isoformat(),
+                "source": "global_hotkey"
+            })
+        except Exception as e:
+            print(f"❌ Error sending context-aware command: {e}")
+
+    def send_vision_switch_command(self, command: str):
+        """Send command to switch vision model"""
+        try:
+            from datetime import datetime
+            print(f"👁️ Global hotkey triggered: {command}")
+            self._write_command_file({
+                "command": command,
+                "timestamp": datetime.now().isoformat(),
+                "source": "global_hotkey"
+            })
+        except Exception as e:
+            print(f"❌ Error sending vision switch command: {e}")
+
     def _write_command_file(self, command_data: dict):
         """Write command to temp file for inter-process communication"""
         import tempfile
@@ -829,6 +861,7 @@ class WindowManager:
         print("   Alt+Q: Switch to primary AI preset")
         print("   Alt+W: Switch to secondary AI preset")
         print("   Alt+E: Auto-select best AI preset")
+        print("   Alt+T: Switch vision model")
         print("   Alt+M: Toggle microphone mute")
         print("   Alt+U: Toggle universal mute (pause)")
         print("   Alt+1: Set transparent (40% opacity)")

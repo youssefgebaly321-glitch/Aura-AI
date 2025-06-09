@@ -448,8 +448,16 @@ class ScreenshotService {
     updateQueueUI() {
         const queueGrid = document.getElementById('queue-grid');
         const processBtn = document.getElementById('process-queue-btn');
+        const queueTitle = document.querySelector('.queue-title');
         
         if (!queueGrid || !processBtn) return;
+        
+        // Update title to show current vision model
+        if (queueTitle && this.visionConfig) {
+            const currentProvider = window.appState?.visionMode?.currentVisionProvider || 'primary';
+            const providerType = currentProvider === 'primary' ? '1°' : '2°';
+            queueTitle.textContent = `📸 Vision Queue (${providerType} ${this.visionConfig.model})`;
+        }
         
         // Update process button
         processBtn.textContent = `Process (${this.screenshotQueue.length})`;
@@ -695,6 +703,10 @@ Focus on being educational and helping understand both the solutions and the und
                     <div class="vision-hotkey">
                         <kbd>Alt+P</kbd>
                         <span>Process</span>
+                    </div>
+                    <div class="vision-hotkey">
+                        <kbd>Alt+T</kbd>
+                        <span>Switch Model</span>
                     </div>
                     <div class="vision-hotkey">
                         <kbd>Alt+V</kbd>
