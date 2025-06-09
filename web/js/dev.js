@@ -163,18 +163,34 @@ Apply Today:`
 
 import { devLog } from './config.js';
 
-export function autofillForTesting(onboardingForm) {
+export function autofillForTesting() {
     devLog("Autofilling form for testing...");
-    onboardingForm.name.value = devData.name;
-    onboardingForm.company.value = devData.company;
-    onboardingForm.role.value = devData.role;
     
-    onboardingForm.focusCheckboxes.forEach(cb => {
-        if (cb.value === devData.focus) {
-            cb.checked = true;
-        }
-    });
+    // Get form elements directly from DOM
+    const onboardingForm = {
+        name: document.getElementById('user-name'),
+        company: document.getElementById('user-company'),
+        role: document.getElementById('user-role'),
+        focusCheckboxes: document.querySelectorAll('input[name="focus"]'),
+        resume: document.getElementById('user-resume'),
+        objectives: document.getElementById('user-objectives'),
+    };
+    
+    // Check if elements exist before setting values
+    if (onboardingForm.name) onboardingForm.name.value = devData.name;
+    if (onboardingForm.company) onboardingForm.company.value = devData.company;
+    if (onboardingForm.role) onboardingForm.role.value = devData.role;
+    
+    if (onboardingForm.focusCheckboxes) {
+        onboardingForm.focusCheckboxes.forEach(cb => {
+            if (cb.value === devData.focus) {
+                cb.checked = true;
+            }
+        });
+    }
 
-    onboardingForm.resume.value = devData.resume;
-    onboardingForm.objectives.value = devData.objectives;
+    if (onboardingForm.resume) onboardingForm.resume.value = devData.resume;
+    if (onboardingForm.objectives) onboardingForm.objectives.value = devData.objectives;
+    
+    devLog("✅ Form autofilled successfully!");
 }

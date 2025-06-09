@@ -636,13 +636,26 @@ Focus on being educational and helping understand both the solutions and the und
             
             // Send via WebSocket if available
             if (window.sendSocketMessage) {
+                // Show processing status in conversation
+                if (window.webSocketHandler && window.webSocketHandler.showVisionProcessingStatus) {
+                    window.webSocketHandler.showVisionProcessingStatus(
+                        screenshots.length,
+                        this.visionConfig.provider,
+                        this.visionConfig.model
+                    );
+                }
+                
                 window.sendSocketMessage('vision_analysis', payload);
                 
                 // Return a promise that resolves when we get the response
                 return new Promise((resolve, reject) => {
                     const timeout = setTimeout(() => {
-                        reject(new Error('Vision analysis timeout (60s)'));
-                    }, 60000); // 60 second timeout
+                        // Hide processing status on timeout
+                        if (window.webSocketHandler && window.webSocketHandler.hideVisionProcessingStatus) {
+                            window.webSocketHandler.hideVisionProcessingStatus();
+                        }
+                        reject(new Error('Vision analysis timeout (45s)'));
+                    }, 45000); // Reduced to 45 seconds to match backend optimization
                     
                     // This would be handled by the WebSocket message handler
                     window.visionAnalysisResolver = (result) => {
