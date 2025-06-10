@@ -44,6 +44,9 @@ class LiveInterviewUI {
         
         // Initialize real-time markdown parser
         this.markdownParser = new StreamingMarkdownParser();
+        
+        // Enable thinking content filter by default
+        this.thinkingFilterEnabled = true;
     }
 
     // Initialize elements
@@ -373,13 +376,16 @@ class LiveInterviewUI {
 
     // Add AI response (legacy method)
     addAIResponse(response, metadata = {}) {
-        this.currentAIElement = this.createMessageElement(response, 'ai-response');
+        // Filter thinking content from response
+        const filteredResponse = this.filterThinkingContent(response);
+        
+        this.currentAIElement = this.createMessageElement(filteredResponse, 'ai-response');
         this.conversationStream.appendChild(this.currentAIElement);
 
         // Use ai_streaming mode to prevent forced scrolling
         this.setScrollMode('ai_streaming', this.currentAIElement);
 
-        this.startStreaming(this.currentAIElement, response, true, () => {
+        this.startStreaming(this.currentAIElement, filteredResponse, true, () => {
             // Add metadata after streaming completes
             this.addResponseMetadata(this.currentAIElement, metadata);
             
@@ -405,13 +411,16 @@ class LiveInterviewUI {
             screenshotCount: metadata?.screenshotCount
         });
         
-        const visionElement = this.createVisionAnalysisElement(analysis, metadata);
+        // Filter thinking content from analysis
+        const filteredAnalysis = this.filterThinkingContent(analysis);
+        
+        const visionElement = this.createVisionAnalysisElement(filteredAnalysis, metadata);
         this.conversationStream.appendChild(visionElement);
 
         // Use ai_streaming mode to prevent forced scrolling
         this.setScrollMode('ai_streaming', visionElement);
 
-        this.startStreaming(visionElement, analysis, true, () => {
+        this.startStreaming(visionElement, filteredAnalysis, true, () => {
             // On completion, stay in current position - don't force scroll
             // Only set to live_bottom if user is already at bottom
             if (this.isUserNearBottom()) {
@@ -428,9 +437,12 @@ class LiveInterviewUI {
 
     // Add message to conversation
     addMessage(content, type) {
-        const messageElement = this.createMessageElement(content, type);
+        // Filter thinking content from all messages
+        const filteredContent = this.filterThinkingContent(content);
+        
+        const messageElement = this.createMessageElement(filteredContent, type);
         this.conversationStream.appendChild(messageElement);
-        this.startStreaming(messageElement, content);
+        this.startStreaming(messageElement, filteredContent);
         
         // Only auto-scroll if user is near bottom, otherwise respect their position
         if (this.isUserNearBottom()) {
@@ -976,7 +988,8 @@ class LiveInterviewUI {
             indicator.remove();
         }
         
-        // Process chunk through real-time markdown parser
+        // Process chunk through real-time markdown parser first (don't filter individual chunks)
+        // The markdown parser will handle the thinking content filtering at the buffer level
         const renderedHTML = this.markdownParser.processChunk(chunk);
         
         // Update content with rendered HTML
@@ -999,9 +1012,10 @@ class LiveInterviewUI {
             // Only process content if not force finalizing
             if (!metadata.forceFinalize && this.currentStreamingContent) {
                 // Finalize the markdown parser to process any remaining content
+                // The markdown parser already handles thinking content filtering
                 const finalContent = this.markdownParser.finalize();
                 this.currentStreamingContent.innerHTML = finalContent;
-                console.log('📝 Real-time markdown parsing finalized');
+                console.log('📝 Real-time markdown parsing finalized with thinking content filtering');
             } else if (metadata.forceFinalize) {
                 // For force finalize, just mark as complete with current content
                 console.log('🔄 Force finalizing previous response to start new one');
@@ -1075,12 +1089,39 @@ class LiveInterviewUI {
             return content;
         }
         
+        // Check if thinking filter is enabled (default to true)
+        if (this.thinkingFilterEnabled === false) {
+            return content;
+        }
+        
         // Remove content between <think> and </think> tags (case insensitive, multiline)
         const thinkingRegex = /<think\s*>[\s\S]*?<\/think\s*>/gi;
-        let filteredContent = content.replace(thinkingRegex, '');
+        const originalLength = content.length;
         
-        // Clean up any extra whitespace or newlines left behind
-        filteredContent = filteredContent.replace(/\n\s*\n\s*\n/g, '\n\n').trim();
+        // Remove thinking content but preserve surrounding whitespace structure
+        let filteredContent = content.replace(thinkingRegex, (match, offset, string) => {
+            // Check if the thinking block is on its own line(s)
+            const beforeMatch = string.substring(0, offset);
+            const afterMatch = string.substring(offset + match.length);
+            
+            const beforeEndsWithNewline = beforeMatch.endsWith('\n') || beforeMatch.endsWith('\n\n');
+            const afterStartsWithNewline = afterMatch.startsWith('\n') || afterMatch.startsWith('\n\n');
+            
+            // If the thinking block is on its own line, preserve one newline
+            if (beforeEndsWithNewline && afterStartsWithNewline) {
+                return '\n';
+            }
+            // If it's inline, just remove it
+            return '';
+        });
+        
+        // Only clean up excessive newlines (3 or more consecutive), preserve normal paragraph breaks
+        filteredContent = filteredContent.replace(/\n{3,}/g, '\n\n');
+        
+        // Log if thinking content was filtered
+        if (originalLength !== filteredContent.length) {
+            console.log(`🧠 Filtered thinking content: ${originalLength} → ${filteredContent.length} chars`);
+        }
         
         return filteredContent;
     }
@@ -1340,6 +1381,28 @@ window.enableMarkdown = () => {
     console.log('📝 Markdown processing enabled - formatted text');
 };
 
+// Thinking content filter controls
+window.enableThinkingFilter = () => {
+    if (window.liveInterviewUI) {
+        window.liveInterviewUI.thinkingFilterEnabled = true;
+        console.log('🧠 Thinking content filter enabled - <think> tags will be hidden');
+    }
+};
+
+window.disableThinkingFilter = () => {
+    if (window.liveInterviewUI) {
+        window.liveInterviewUI.thinkingFilterEnabled = false;
+        console.log('🧠 Thinking content filter disabled - <think> tags will be visible');
+    }
+};
+
+window.isThinkingFilterEnabled = () => {
+    if (window.liveInterviewUI) {
+        return window.liveInterviewUI.thinkingFilterEnabled !== false; // Default to true
+    }
+    return true;
+};
+
 // Add test function for verifying code block styling
 function testCodeBlockStyling() {
     const testContent = `
@@ -1485,5 +1548,143 @@ function binarySearch(arr, target) {
 
 // Make function available globally for testing
 window.testCodeBlockStyling = testCodeBlockStyling;
+
+// Test function for thinking content filtering
+window.testThinkingFilter = () => {
+    const testContent = `
+Here's some normal content with **bold formatting**.
+
+<think>
+This is thinking content that should be filtered out.
+It can span multiple lines and contain various text.
+</think>
+
+This content should remain visible with *italic text*.
+
+## A Header
+
+<THINK>
+This is also thinking content with uppercase tags.
+</THINK>
+
+More visible content here with a [link](https://example.com).
+
+- List item 1
+- List item 2
+
+<think>
+Another thinking block.
+</think>
+
+Final visible content with \`code\`.
+
+\`\`\`javascript
+function example() {
+    return "code block";
+}
+\`\`\`
+`;
+
+    console.log('🧠 Testing thinking content filter...');
+    console.log('Original content:', testContent);
+    
+    const filtered = window.liveInterviewUI.filterThinkingContent(testContent);
+    console.log('Filtered content:', filtered);
+    
+    // Test with streaming parser as well
+    const parser = new window.StreamingMarkdownParser();
+    const streamFiltered = parser.filterThinkingContent(testContent);
+    console.log('Stream parser filtered:', streamFiltered);
+    
+    // Test actual rendering
+    const testElement = document.createElement('div');
+    testElement.innerHTML = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 20px; background: #1a1a1a; color: white; font-family: monospace;">
+            <div>
+                <h3>Original (${testContent.length} chars)</h3>
+                <pre style="background: #333; padding: 10px; white-space: pre-wrap;">${testContent}</pre>
+            </div>
+            <div>
+                <h3>Filtered (${filtered.length} chars)</h3>
+                <pre style="background: #333; padding: 10px; white-space: pre-wrap;">${filtered}</pre>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(testElement);
+    console.log('📺 Added visual comparison to page');
+    
+    return {
+        original: testContent,
+        filtered: filtered,
+        streamFiltered: streamFiltered
+    };
+};
+
+// Quick debug function to test current streaming content
+window.debugCurrentStream = () => {
+    if (window.liveInterviewUI && window.liveInterviewUI.markdownParser) {
+        console.log('🔍 Current streaming buffer:', window.liveInterviewUI.markdownParser.buffer);
+        console.log('🔍 Last processed content:', window.liveInterviewUI.markdownParser.lastProcessedContent);
+        console.log('🔍 Current buffer length:', window.liveInterviewUI.markdownParser.buffer.length);
+        
+        return {
+            buffer: window.liveInterviewUI.markdownParser.buffer,
+            lastProcessed: window.liveInterviewUI.markdownParser.lastProcessedContent,
+            bufferLength: window.liveInterviewUI.markdownParser.buffer.length
+        };
+    }
+    console.warn('No active streaming parser');
+    return null;
+};
+
+// Test streaming with thinking content
+window.testStreamingWithThinking = () => {
+    const testChunks = [
+        "# Response from AI Assistant\n\n",
+        "This is a normal response with **bold text**.\n\n",
+        "<think>\n",
+        "I should think about this carefully.\n",
+        "Let me analyze the user's request.\n",
+        "</think>\n\n",
+        "Here's my actual response with proper formatting:\n\n",
+        "- Point 1\n",
+        "- Point 2\n\n",
+        "<think>More thinking content</think>\n\n",
+        "And here's some `code` and more content."
+    ];
+    
+    console.log('🧪 Testing streaming with thinking content...');
+    
+    // Start streaming
+    if (window.liveInterviewUI) {
+        window.liveInterviewUI.startStreamingAIResponse({
+            preset: { model: 'test-model' }
+        });
+        
+        // Stream chunks with delay
+        let chunkIndex = 0;
+        const streamChunk = () => {
+            if (chunkIndex < testChunks.length) {
+                console.log(`📝 Streaming chunk ${chunkIndex + 1}/${testChunks.length}:`, testChunks[chunkIndex]);
+                window.liveInterviewUI.appendStreamingChunk(testChunks[chunkIndex]);
+                chunkIndex++;
+                setTimeout(streamChunk, 200); // 200ms delay between chunks
+            } else {
+                console.log('✅ Streaming complete, finalizing...');
+                setTimeout(() => {
+                    window.liveInterviewUI.finalizeStreamingResponse({
+                        preset: { model: 'test-model' }
+                    });
+                }, 500);
+            }
+        };
+        
+        setTimeout(streamChunk, 100);
+        console.log('🚀 Started streaming test...');
+    } else {
+        console.warn('❌ Live interview UI not available');
+    }
+};
 
 export default window.liveInterviewUI; 

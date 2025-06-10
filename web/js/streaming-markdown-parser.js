@@ -18,6 +18,9 @@ export class StreamingMarkdownParser {
             paragraphBreak: /\n\s*\n/,
             inlineComplete: /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/
         };
+        
+        // Thinking content filter regex
+        this.thinkingRegex = /<think\s*>[\s\S]*?<\/think\s*>/gi;
     }
 
     reset() {
@@ -149,6 +152,9 @@ export class StreamingMarkdownParser {
             content = content.substring(0, lastBracket);
         }
         
+        // Filter thinking content AFTER determining safe content boundaries
+        content = this.filterThinkingContent(content);
+        
         return content;
     }
 
@@ -159,8 +165,12 @@ export class StreamingMarkdownParser {
         const pendingContent = this.buffer.slice(this.processedLength);
         
         if (pendingContent.trim()) {
-            const escapedPending = this.escapeHtml(pendingContent);
-            return this.lastRenderedHTML + `<span class="pending-text" style="margin:0;padding:0;">${escapedPending}</span>`;
+            // Filter thinking content from pending content
+            const filteredPending = this.filterThinkingContent(pendingContent);
+            if (filteredPending.trim()) {
+                const escapedPending = this.escapeHtml(filteredPending);
+                return this.lastRenderedHTML + `<span class="pending-text" style="margin:0;padding:0;">${escapedPending}</span>`;
+            }
         }
         
         return this.lastRenderedHTML;
@@ -170,7 +180,8 @@ export class StreamingMarkdownParser {
      * Simple fallback when processing fails
      */
     getSimpleFallback() {
-        return `<p class="markdown-paragraph" style="margin:0;padding:0;">${this.escapeHtml(this.buffer)}</p>`;
+        const filteredBuffer = this.filterThinkingContent(this.buffer);
+        return `<p class="markdown-paragraph" style="margin:0;padding:0;">${this.escapeHtml(filteredBuffer)}</p>`;
     }
 
     /**
@@ -231,6 +242,9 @@ export class StreamingMarkdownParser {
      * Get the final rendered content (for when streaming completes)
      */
     finalize() {
+        // Apply final thinking content filter to buffer
+        this.buffer = this.filterThinkingContent(this.buffer);
+        
         // Process the entire buffer one final time
         try {
             const blocks = this.markdownProcessor.parseContent(this.buffer);
@@ -258,6 +272,47 @@ export class StreamingMarkdownParser {
             // Fallback to simple processing
             return `<p class="markdown-paragraph">${this.escapeHtml(this.buffer)}</p>`;
         }
+    }
+
+    /**
+     * Filter thinking content from text
+     * @param {string} content - Text content to filter
+     * @returns {string} - Filtered content without thinking tags
+     */
+    filterThinkingContent(content) {
+        if (!content || typeof content !== 'string') {
+            return content;
+        }
+        
+        const originalLength = content.length;
+        
+        // Remove content between <think> and </think> tags (case insensitive, multiline)
+        // But preserve surrounding whitespace structure
+        let filteredContent = content.replace(this.thinkingRegex, (match, offset, string) => {
+            // Check if the thinking block is on its own line(s)
+            const beforeMatch = string.substring(0, offset);
+            const afterMatch = string.substring(offset + match.length);
+            
+            const beforeEndsWithNewline = beforeMatch.endsWith('\n') || beforeMatch.endsWith('\n\n');
+            const afterStartsWithNewline = afterMatch.startsWith('\n') || afterMatch.startsWith('\n\n');
+            
+            // If the thinking block is on its own line, preserve one newline
+            if (beforeEndsWithNewline && afterStartsWithNewline) {
+                return '\n';
+            }
+            // If it's inline, just remove it
+            return '';
+        });
+        
+        // Only clean up excessive newlines (3 or more consecutive), preserve normal paragraph breaks
+        filteredContent = filteredContent.replace(/\n{3,}/g, '\n\n');
+        
+        // Log if thinking content was filtered (only for significant changes to avoid spam)
+        if (originalLength !== filteredContent.length && originalLength - filteredContent.length > 10) {
+            console.log(`🧠 StreamingParser filtered thinking content: ${originalLength} → ${filteredContent.length} chars`);
+        }
+        
+        return filteredContent;
     }
 
     escapeHtml(text) {

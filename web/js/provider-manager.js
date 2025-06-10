@@ -96,20 +96,70 @@ export class ProviderManager {
 
     setDefaultAIProvider() {
         try {
-            const defaultProvider = this.aiProviders.find(p => p.default);
-            if (defaultProvider && this.onboardingForm.providerSelect) {
-                this.onboardingForm.providerSelect.value = defaultProvider.name;
+            // Set primary provider
+            const primaryProvider = this.aiProviders.find(p => p.defaultPrimary);
+            if (primaryProvider && this.onboardingForm.providerSelect) {
+                this.onboardingForm.providerSelect.value = primaryProvider.name;
                 this.onboardingForm.providerSelect.dispatchEvent(new Event('change'));
 
                 setTimeout(() => {
                     if (this.onboardingForm.modelSelect && !this.onboardingForm.modelSelect.disabled) {
-                        const defaultModel = defaultProvider.models.find(m => m === 'llama-3.3-70b') || defaultProvider.models[0];
+                        const defaultModel = primaryProvider.defaultModel || primaryProvider.models[0];
                         if (defaultModel) {
                             this.onboardingForm.modelSelect.value = defaultModel;
                         }
                     }
                 }, 150);
             }
+
+            // Set secondary provider
+            const secondaryProvider = this.aiProviders.find(p => p.defaultSecondary);
+            if (secondaryProvider && this.onboardingForm.secondaryProviderSelect) {
+                this.onboardingForm.secondaryProviderSelect.value = secondaryProvider.name;
+                this.onboardingForm.secondaryProviderSelect.dispatchEvent(new Event('change'));
+
+                setTimeout(() => {
+                    if (this.onboardingForm.secondaryModelSelect && !this.onboardingForm.secondaryModelSelect.disabled) {
+                        const defaultModel = secondaryProvider.defaultModel || secondaryProvider.models[0];
+                        if (defaultModel) {
+                            this.onboardingForm.secondaryModelSelect.value = defaultModel;
+                        }
+                    }
+                }, 200);
+            }
+
+            // Set primary vision provider
+            const primaryVisionProvider = this.aiProviders.find(p => p.defaultVisionPrimary);
+            if (primaryVisionProvider && this.onboardingForm.visionProviderSelect) {
+                this.onboardingForm.visionProviderSelect.value = primaryVisionProvider.name;
+                this.onboardingForm.visionProviderSelect.dispatchEvent(new Event('change'));
+
+                setTimeout(() => {
+                    if (this.onboardingForm.visionModelSelect && !this.onboardingForm.visionModelSelect.disabled) {
+                        const defaultModel = primaryVisionProvider.defaultVisionModel || primaryVisionProvider.visionModels[0];
+                        if (defaultModel) {
+                            this.onboardingForm.visionModelSelect.value = defaultModel;
+                        }
+                    }
+                }, 250);
+            }
+
+            // Set secondary vision provider
+            const secondaryVisionProvider = this.aiProviders.find(p => p.defaultVisionSecondary);
+            if (secondaryVisionProvider && this.onboardingForm.visionSecondaryProviderSelect) {
+                this.onboardingForm.visionSecondaryProviderSelect.value = secondaryVisionProvider.name;
+                this.onboardingForm.visionSecondaryProviderSelect.dispatchEvent(new Event('change'));
+
+                setTimeout(() => {
+                    if (this.onboardingForm.visionSecondaryModelSelect && !this.onboardingForm.visionSecondaryModelSelect.disabled) {
+                        const defaultModel = secondaryVisionProvider.defaultVisionModel || secondaryVisionProvider.visionModels[0];
+                        if (defaultModel) {
+                            this.onboardingForm.visionSecondaryModelSelect.value = defaultModel;
+                        }
+                    }
+                }, 300);
+            }
+
         } catch (error) {
             console.error("Error setting default AI provider:", error);
         }
