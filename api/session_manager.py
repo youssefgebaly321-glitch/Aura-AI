@@ -129,7 +129,7 @@ class InterviewSession:
             
             print(f"🧠 Analyzing {len(screenshots)} screenshots with {provider_name}-{model_name}")
             
-            # Call vision service to analyze the coding problem
+            # Call vision service to analyze the coding problem with comprehensive prompt
             analysis, result_info = await vision_service.analyze_coding_problem(
                 provider_name=provider_name,
                 model_name=model_name,

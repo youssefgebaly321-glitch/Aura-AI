@@ -245,9 +245,16 @@ export class WebSocketHandler {
             window.visionAnalysisResolver = null; // Clear the resolver
         }
         
-        // Also display the result in the live interview UI if successful
+        // Display the result in the specialized vision UI
         if (result.success && result.analysis) {
-            liveInterviewUI.addMessage(result.analysis, "ai-response");
+            // Use the dedicated vision analysis method with proper metadata
+            const metadata = {
+                provider: result.provider,
+                model: result.model,
+                screenshotCount: result.screenshot_count,
+                languages: result.languages
+            };
+            liveInterviewUI.addVisionAnalysis(result.analysis, metadata);
         } else if (!result.success && result.error) {
             liveInterviewUI.addMessage(`❌ Vision analysis failed: ${result.error}`, "system-error");
         }
