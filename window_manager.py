@@ -1105,7 +1105,7 @@ class WindowManager:
                 elif self.scrolling_down:
                     self.send_scroll_command("down")
                 
-                # Wait 100ms between scroll commands for smooth scrolling
+                # Wait 50ms between scroll commands for smooth scrolling
                 time.sleep(0.05)
             except Exception as e:
                 print(f"❌ Error in continuous scroll loop: {e}")
