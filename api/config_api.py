@@ -1,4 +1,5 @@
-import json
+import orjson
+import aiofiles
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from core.config import settings
@@ -37,8 +38,9 @@ async def get_ai_providers():
     to the frontend, excluding sensitive API keys.
     """
     try:
-        with open("ai_providers.json", "r") as f:
-            providers = json.load(f)
+        async with aiofiles.open("ai_providers.json", "rb") as f:
+            file_content = await f.read()
+            providers = orjson.loads(file_content)
         
         # Sanitize the data before sending to the client
         client_safe_providers = [
@@ -70,8 +72,9 @@ async def verify_ai_provider(request: ProviderVerifyRequest):
     Verifies a connection to the selected AI provider.
     """
     try:
-        with open("ai_providers.json", "r") as f:
-            providers = json.load(f)
+        async with aiofiles.open("ai_providers.json", "rb") as f:
+            file_content = await f.read()
+            providers = orjson.loads(file_content)
         
         provider_config = next((p for p in providers if p["name"] == request.name), None)
 
@@ -94,8 +97,9 @@ async def verify_vision_ai_provider(request: ProviderVerifyRequest):
     Verifies a connection to the selected vision AI provider.
     """
     try:
-        with open("ai_providers.json", "r") as f:
-            providers = json.load(f)
+        async with aiofiles.open("ai_providers.json", "rb") as f:
+            file_content = await f.read()
+            providers = orjson.loads(file_content)
         
         provider_config = next((p for p in providers if p["name"] == request.name), None)
 

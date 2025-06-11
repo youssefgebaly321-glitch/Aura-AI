@@ -1,5 +1,5 @@
 import asyncio
-import json
+import orjson
 from datetime import datetime
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
 from typing import Optional

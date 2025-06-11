@@ -1,4 +1,4 @@
-import json
+import orjson
 import asyncio
 from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
@@ -251,9 +251,9 @@ class MultiLLMManager:
     def load_configuration(self, primary_config: Dict[str, str], secondary_config: Optional[Dict[str, str]] = None):
         """Load primary and optional secondary configurations"""
         try:
-            # Load providers from JSON
-            with open("ai_providers.json", "r") as f:
-                providers_config = json.load(f)
+            # Load providers from JSON using high-performance orjson
+            with open("ai_providers.json", "rb") as f:
+                providers_config = orjson.loads(f.read())
             
             # Setup primary provider
             primary_provider_config = next((p for p in providers_config

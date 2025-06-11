@@ -6,6 +6,9 @@ pydantic-settings
 openai
 deepgram-sdk
 requests
+httpx  # High-performance async HTTP client to replace requests
+orjson  # Ultra-fast JSON serialization/deserialization
+aiofiles  # Async file I/O operations
 deepgram-sdk==3.*
 pynput
 python-dotenv

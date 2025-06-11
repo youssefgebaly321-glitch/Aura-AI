@@ -4,9 +4,11 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from threading import Thread
+import asyncio
+import aiofiles
 import window_manager  # Our new module for capture protection
 import os
-import json
+import orjson
 import tempfile
 import time
 from pathlib import Path
@@ -58,7 +60,18 @@ class GlobalCommandMonitor:
         self.running = False
         
     def _monitor_loop(self):
-        """Main monitoring loop that checks for commands"""
+        """Main monitoring loop that checks for commands - now runs async event loop"""
+        # Create new event loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        try:
+            loop.run_until_complete(self._async_monitor_loop())
+        finally:
+            loop.close()
+    
+    async def _async_monitor_loop(self):
+        """Async monitoring loop that checks for commands with improved performance"""
         while self.running:
             try:
                 if os.path.exists(self.command_file):
@@ -68,10 +81,11 @@ class GlobalCommandMonitor:
                     if file_mtime > self.last_command_time:
                         self.last_command_time = file_mtime
                         
-                        # Read and process the command
+                        # Read and process the command using async file I/O
                         try:
-                            with open(self.command_file, 'r') as f:
-                                command_data = json.load(f)
+                            async with aiofiles.open(self.command_file, 'rb') as f:
+                                file_content = await f.read()
+                                command_data = orjson.loads(file_content)
                             
                             # Process the command
                             if self._process_command(command_data):
@@ -83,15 +97,15 @@ class GlobalCommandMonitor:
                                     # Don't fail if cleanup fails
                                     pass
                             
-                        except (json.JSONDecodeError, IOError) as e:
+                        except (orjson.JSONDecodeError, IOError) as e:
                             # Ignore file read errors (file might be being written)
                             pass
                             
-                time.sleep(0.2)  # Check every 200ms (reduced frequency)
+                await asyncio.sleep(0.2)  # Check every 200ms (reduced frequency)
                 
             except Exception as e:
                 print(f"❌ Error in command monitor: {e}")
-                time.sleep(1)  # Wait longer on error
+                await asyncio.sleep(1)  # Wait longer on error
                 
     def _process_command(self, command_data):
         """Process a command from the global hotkey"""
