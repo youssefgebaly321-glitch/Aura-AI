@@ -10,6 +10,7 @@ class LiveInterviewUI {
         this.conversationStream = null;
         this.activityIndicator = null;
         this.endButton = null;
+        this.resetButton = null;
         this.muteButton = null;
         this.currentInterviewerElement = null; // Track interviewer message separately
         this.currentCandidateElement = null; // Track candidate message separately
@@ -55,6 +56,7 @@ class LiveInterviewUI {
         this.conversationStream = document.getElementById('conversation-stream');
         this.activityIndicator = document.getElementById('activity-indicator');
         this.endButton = document.getElementById('end-interview-btn');
+        this.resetButton = document.getElementById('reset-interview-btn');
         this.muteButton = document.getElementById('mute-btn');
         
         // Listen to the mute manager for state changes
@@ -68,6 +70,10 @@ class LiveInterviewUI {
 
         if (this.endButton) {
             this.endButton.addEventListener('click', () => this.endInterview());
+        }
+
+        if (this.resetButton) {
+            this.resetButton.addEventListener('click', () => this.resetInterview());
         }
         
         if (this.muteButton) {
@@ -1121,6 +1127,10 @@ class LiveInterviewUI {
             } else {
                 console.log('🤖 Real-time AI streaming completed normally');
             }
+            
+            // Show listening indicator after response is complete
+            this.showActivity('Listening...');
+
         } else {
             console.warn('⚠️ No streaming element to finalize');
         }
@@ -1272,6 +1282,13 @@ class LiveInterviewUI {
     endInterview() {
         if (typeof window.endInterview === 'function') {
             window.endInterview();
+        }
+    }
+
+    // Reset interview
+    resetInterview() {
+        if (typeof window.resetInterview === 'function') {
+            window.resetInterview();
         }
     }
 

@@ -164,6 +164,19 @@ class InterviewSession:
         session_manager.remove_session(self.session_id)
         # The websocket will be closed by the client or the main loop
 
+    async def handle_reset_session(self, payload: dict):
+        """Handles the reset of a session's context."""
+        print(f"🔄 Session {self.session_id}: Resetting interview context...")
+        self.transcript_buffer = ""
+        if self.silence_timer:
+            self.silence_timer.cancel()
+        
+        if self.llm_manager:
+            self.llm_manager.reset_context()
+
+        await self._send_json("session_reset_complete", {"status": "ok"})
+        print(f"✅ Session {self.session_id}: Context has been reset.")
+
     async def initialize_managers(self, primary_provider_config, secondary_provider_config, primary_vision_config, secondary_vision_config, onboarding_context):
         """Initializes all necessary managers for the session."""
         # Initialize LLM Manager

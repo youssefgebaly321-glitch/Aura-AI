@@ -505,6 +505,11 @@ class MultiLLMManager:
             }
         }
 
+    def reset_context(self):
+        """Resets the conversation context."""
+        if self.shared_context:
+            self.shared_context.reset_conversation_history()
+
 # --- Standalone Verification Function ---
 
 async def verify_provider_connection(base_url: str, api_key: str, model_name: str) -> bool:

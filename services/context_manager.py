@@ -122,3 +122,8 @@ class PersistentContextManager:
     def ensure_context_available(self) -> bool:
         """Verify persistent context is properly initialized"""
         return self.is_initialized and bool(self.persistent_context.get('candidate_name'))
+
+    def reset_conversation_history(self):
+        """Resets the conversation history."""
+        self.conversation_history = []
+        print("🔄 Conversation history reset")

@@ -150,6 +150,21 @@ async function endInterview() {
     console.log('✅ Interview ended and state cleared successfully');
 }
 
+async function resetInterview() {
+    console.log('🔄 Resetting interview...');
+    
+    // Send reset signal to backend
+    webSocketHandler.sendMessage('reset_session', {});
+    
+    // Clear conversation UI
+    if (window.liveInterviewUI) {
+        liveInterviewUI.clearConversation();
+        liveInterviewUI.showActivity('Listening...');
+    }
+    
+    console.log('✅ Interview reset successfully');
+}
+
 // Provider management functions are now handled by ProviderManager
 
 
@@ -334,6 +349,7 @@ window.resetScreenshotQueue = resetScreenshotQueue;
 window.toggleMicMute = toggleMicMute;
 window.toggleUniversalMute = toggleUniversalMute;
 window.endInterview = endInterview;
+window.resetInterview = resetInterview;
 window.getScreenVideoTrack = getScreenVideoTrack;
 window.isScreenSharingAvailable = isScreenSharingAvailable;
 window.testStreamingMarkdown = testStreamingMarkdown;

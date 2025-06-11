@@ -165,6 +165,9 @@ export class WebSocketHandler {
             case 'session_created':
             case 'session_resumed':
                 break;
+            case 'session_reset_complete':
+                console.log('✅ Session reset confirmed by backend');
+                break;
             default:
                 console.warn('Unknown message type:', data.type);
         }
