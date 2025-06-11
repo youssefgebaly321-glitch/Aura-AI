@@ -3,7 +3,6 @@ import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from threading import Thread
 import asyncio
 import aiofiles
 import window_manager  # Our new module for capture protection
@@ -11,6 +10,9 @@ import os
 import orjson
 import tempfile
 import time
+import signal
+import sys
+import threading
 from pathlib import Path
 from api import websocket, config_api
 from core.config import settings, print_config_debug
@@ -35,13 +37,14 @@ class GlobalCommandMonitor:
         self.startup_delay = 5  # Ignore commands for first 5 seconds after startup
         self.last_processed_command = None
         self.command_cooldown = 0.5  # 500ms cooldown between same commands
+        self._monitor_task = None
         
     def set_websocket_manager(self, ws_manager):
         """Set the websocket manager for sending commands"""
         self.websocket_manager = ws_manager
         
-    def start_monitoring(self):
-        """Start the command monitoring thread"""
+    async def start_monitoring(self):
+        """Start the command monitoring task"""
         # Clean up any old command files
         try:
             if os.path.exists(self.command_file):
@@ -51,24 +54,19 @@ class GlobalCommandMonitor:
             print(f"⚠️ Could not clear old command file: {e}")
         
         self.running = True
-        monitor_thread = Thread(target=self._monitor_loop, daemon=True)
-        monitor_thread.start()
+        self._monitor_task = asyncio.create_task(self._async_monitor_loop())
         print("🎮 Global command monitor started")
         
-    def stop_monitoring(self):
+    async def stop_monitoring(self):
         """Stop the command monitoring"""
         self.running = False
-        
-    def _monitor_loop(self):
-        """Main monitoring loop that checks for commands - now runs async event loop"""
-        # Create new event loop for this thread
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        try:
-            loop.run_until_complete(self._async_monitor_loop())
-        finally:
-            loop.close()
+        if self._monitor_task and not self._monitor_task.done():
+            self._monitor_task.cancel()
+            try:
+                await self._monitor_task
+            except asyncio.CancelledError:
+                pass
+        print("🎮 Global command monitor stopped")
     
     async def _async_monitor_loop(self):
         """Async monitoring loop that checks for commands with improved performance"""
@@ -103,6 +101,8 @@ class GlobalCommandMonitor:
                             
                 await asyncio.sleep(0.2)  # Check every 200ms (reduced frequency)
                 
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 print(f"❌ Error in command monitor: {e}")
                 await asyncio.sleep(1)  # Wait longer on error
@@ -208,7 +208,6 @@ class GlobalCommandMonitor:
 # Create global command monitor instance
 command_monitor = GlobalCommandMonitor()
 
-
 # --- FastAPI App Setup ---
 app = FastAPI()
 app.include_router(websocket.router)
@@ -218,25 +217,159 @@ app.include_router(config_api.router)
 # This makes files in 'web/css' and 'web/js' available under '/static/css' and '/static/js'
 app.mount("/static", StaticFiles(directory="web"), name="static")
 
-
 @app.get("/")
 async def read_index(request: Request):
     """Serves the main index.html file."""
     return FileResponse(os.path.join('web', 'index.html'))
 
+# --- Async Server Management ---
+class UvicornServer:
+    """Manages the Uvicorn server as an asyncio task"""
+    
+    def __init__(self, app, host="127.0.0.1", port=8002):
+        self.app = app
+        self.host = host
+        self.port = port
+        self.server = None
+        self.server_task = None
+        
+    async def start(self):
+        """Start the Uvicorn server as an asyncio task"""
+        config = uvicorn.Config(
+            app=self.app,
+            host=self.host,
+            port=self.port,
+            log_level="warning",
+            loop="asyncio"
+        )
+        self.server = uvicorn.Server(config)
+        self.server_task = asyncio.create_task(self.server.serve())
+        print(f"🚀 Uvicorn server started on {self.host}:{self.port}")
+        
+    async def stop(self):
+        """Stop the Uvicorn server gracefully"""
+        if self.server:
+            self.server.should_exit = True
+            if self.server_task and not self.server_task.done():
+                try:
+                    await asyncio.wait_for(self.server_task, timeout=5.0)
+                except asyncio.TimeoutError:
+                    self.server_task.cancel()
+                    try:
+                        await self.server_task
+                    except asyncio.CancelledError:
+                        pass
+        print("🛑 Uvicorn server stopped")
 
-# --- Server and Window Management ---
-def run_server():
-    """Runs the Uvicorn server in a separate thread."""
-    uvicorn.run(app, host="127.0.0.1", port=8002, log_level="warning")
+# Global server instance
+uvicorn_server = UvicornServer(app)
 
-if __name__ == '__main__':
-    # 3. Run the server in a separate thread
-    server_thread = Thread(target=run_server)
-    server_thread.daemon = True  # Allows main thread to exit even if server is running
-    server_thread.start()
+# --- Background Thread for Asyncio Services ---
+class AsyncioServiceThread:
+    """Manages all asyncio services in a dedicated background thread"""
+    
+    def __init__(self):
+        self.thread = None
+        self.loop = None
+        self.shutdown_event = None
+        self.services_task = None
+        
+    def start(self):
+        """Start the asyncio services in a background thread"""
+        self.shutdown_event = threading.Event()
+        self.thread = threading.Thread(target=self._run_asyncio_thread, daemon=True)
+        self.thread.start()
+        print("🚀 Asyncio services thread started")
+        
+    def stop(self):
+        """Stop the asyncio services gracefully"""
+        if self.shutdown_event:
+            print("🛑 Requesting asyncio services shutdown...")
+            self.shutdown_event.set()
+            
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=10)  # Wait up to 10 seconds
+            if self.thread.is_alive():
+                print("⚠️ Asyncio thread did not stop gracefully")
+            else:
+                print("✅ Asyncio services thread stopped")
+    
+    def _run_asyncio_thread(self):
+        """Run the asyncio event loop in this thread"""
+        try:
+            # Create a new event loop for this thread
+            self.loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self.loop)
+            
+            print("🔄 Starting asyncio event loop in background thread")
+            
+            # Run the async services
+            self.loop.run_until_complete(self._run_async_services())
+            
+        except Exception as e:
+            print(f"❌ Error in asyncio thread: {e}")
+        finally:
+            if self.loop:
+                try:
+                    # Clean up any remaining tasks
+                    pending = asyncio.all_tasks(self.loop)
+                    if pending:
+                        print(f"🧹 Cancelling {len(pending)} pending tasks...")
+                        for task in pending:
+                            task.cancel()
+                        
+                        # Wait for tasks to be cancelled
+                        self.loop.run_until_complete(
+                            asyncio.gather(*pending, return_exceptions=True)
+                        )
+                    
+                    self.loop.close()
+                    print("✅ Asyncio event loop closed")
+                except Exception as e:
+                    print(f"⚠️ Error during loop cleanup: {e}")
+    
+    async def _run_async_services(self):
+        """Run all async services concurrently"""
+        try:
+            print("🚀 Starting async services...")
+            
+            # Start the Uvicorn server
+            await uvicorn_server.start()
+            
+            # Start the global command monitor
+            await command_monitor.start_monitoring()
+            
+            # Wait for shutdown signal
+            while not self.shutdown_event.is_set():
+                await asyncio.sleep(0.1)
+            
+            print("🛑 Shutdown signal received, cleaning up...")
+            
+        except Exception as e:
+            print(f"❌ Error in async services: {e}")
+        finally:
+            # Cleanup
+            await self._cleanup_async_services()
+    
+    async def _cleanup_async_services(self):
+        """Clean up all async services"""
+        print("🧹 Cleaning up async services...")
+        
+        # Stop the command monitor
+        await command_monitor.stop_monitoring()
+        
+        # Stop the server
+        await uvicorn_server.stop()
+        
+        print("✅ Async services cleanup complete")
 
-    # 4. Create the pywebview window, loading the FastAPI server
+# Global asyncio service thread instance
+asyncio_service_thread = AsyncioServiceThread()
+
+# --- Webview Setup (Main Thread) ---
+def setup_webview_window():
+    """Setup and configure the webview window"""
+    # Create the pywebview window, loading the FastAPI server
     window = webview.create_window(
         'Aura',
         'http://127.0.0.1:8002',
@@ -245,7 +378,7 @@ if __name__ == '__main__':
         resizable=True
     )
 
-    # 5. Apply capture protection and transparency (or skip in DEV_MODE)
+    # Window shown event handler
     def on_window_shown():
         print(f"🔧 Window shown event fired. DEV_MODE = {DEV_MODE}")
         
@@ -292,11 +425,47 @@ if __name__ == '__main__':
         
         # Start the global hotkey listener
         window_manager.window_manager.start_hotkey_listener()
-        
-        # Start the global command monitor
-        command_monitor.start_monitoring()
+    
+    # Window closing event handler
+    def on_window_closing():
+        print("🛑 Window closing, shutting down services...")
+        asyncio_service_thread.stop()
+        return True  # Allow window to close
     
     window.events.shown += on_window_shown
+    window.events.closing += on_window_closing
+    
+    return window
 
-    # 6. Start the pywebview event loop with debug based on DEV_MODE
-    webview.start(debug=DEV_MODE)
+# --- Main Application Entry Point ---
+def main():
+    """Main application entry point"""
+    print("🚀 Starting Aura with corrected asyncio-native architecture...")
+    print("   📋 Architecture: pywebview on main thread, asyncio services in background thread")
+    
+    try:
+        # Start the asyncio services in background thread
+        asyncio_service_thread.start()
+        
+        # Give the server a moment to start
+        time.sleep(2)
+        
+        # Setup and run webview on main thread (required by pywebview)
+        window = setup_webview_window()
+        
+        # Start the pywebview event loop (blocks until window closes)
+        print("🖥️ Starting pywebview on main thread...")
+        webview.start(debug=DEV_MODE)
+        
+    except KeyboardInterrupt:
+        print("🛑 Application interrupted by user")
+    except Exception as e:
+        print(f"❌ Application error: {e}")
+    finally:
+        # Ensure cleanup
+        print("🧹 Final cleanup...")
+        asyncio_service_thread.stop()
+        print("✅ Application shutdown complete")
+
+if __name__ == '__main__':
+    main()

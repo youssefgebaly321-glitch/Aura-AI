@@ -36,7 +36,7 @@ class InterviewSession:
         """Handles the deepgram verification request from the client."""
         from services.stt_service import verify_deepgram_api_key
         print(f"➡️ [BACKEND] Received 'verify_deepgram' for session {self.session_id}")
-        is_valid = verify_deepgram_api_key()
+        is_valid = await verify_deepgram_api_key()
         print(f"⬅️ [BACKEND] Sending 'api_key_status' for Deepgram. Valid: {is_valid}")
         await self._send_json("api_key_status", {"service": "deepgram", "valid": is_valid})
 

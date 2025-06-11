@@ -1,5 +1,5 @@
 import asyncio
-import requests
+import httpx
 from deepgram import (
     DeepgramClient,
     DeepgramClientOptions,
@@ -8,7 +8,7 @@ from deepgram import (
 )
 from core.config import settings
 
-def verify_deepgram_api_key():
+async def verify_deepgram_api_key():
     """
     Verifies the Deepgram API key by making a direct HTTP request.
     This is the most reliable method, independent of SDK changes.
@@ -23,14 +23,15 @@ def verify_deepgram_api_key():
     }
 
     try:
-        response = requests.get(url, headers=headers)
-        if response.status_code == 200:
-            print("INFO: Deepgram API key is valid.")
-            return True
-        else:
-            print(f"ERROR: Deepgram API key verification failed. Status: {response.status_code}, Response: {response.text}")
-            return False
-    except requests.exceptions.RequestException as e:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=headers)
+            if response.status_code == 200:
+                print("INFO: Deepgram API key is valid.")
+                return True
+            else:
+                print(f"ERROR: Deepgram API key verification failed. Status: {response.status_code}, Response: {response.text}")
+                return False
+    except httpx.RequestError as e:
         print(f"ERROR: A network error occurred while verifying Deepgram key: {e}")
         return False
 
