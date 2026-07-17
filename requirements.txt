@@ -12,6 +12,7 @@ aiofiles
 pynput
 python-dotenv
 Pillow==12.3.0
+pystray
 winrt-Windows-Foundation==3.2.1
 winrt-Windows-Foundation-Collections==3.2.1
 winrt-Windows-Globalization==3.2.1

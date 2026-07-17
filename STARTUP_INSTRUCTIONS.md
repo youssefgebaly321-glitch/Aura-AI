@@ -29,6 +29,12 @@ If the window is running but not visible, press:
 ```text
 Alt+Z
 ```
+## Background Mode
+
+Closing the Aura window now hides it instead of stopping the app. Aura continues to
+run in the background, and you can bring it back with `Alt+Z` or the Aura icon in
+the Windows notification area. To stop it completely, right-click the tray icon and
+choose **Quit Aura**.
 
 ## Startup Crash Fix
 

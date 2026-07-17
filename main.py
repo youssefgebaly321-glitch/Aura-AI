@@ -1,5 +1,7 @@
 import webview
 import uvicorn
+import pystray
+from PIL import Image, ImageDraw
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -502,17 +504,55 @@ def setup_webview_window():
         # Start the global hotkey listener
         window_manager.window_manager.start_hotkey_listener()
     
+    tray_icon = None
+    is_quitting = False
+
+    def show_window(*_):
+        """Restore Aura from the notification area."""
+        window.show()
+        window_manager.window_manager.set_always_on_top(True)
+
+    def quit_application(*_):
+        """Stop background services only when the user explicitly chooses Quit."""
+        nonlocal is_quitting
+        is_quitting = True
+        if tray_icon:
+            tray_icon.stop()
+        window.destroy()
+
+    def start_tray_icon():
+        nonlocal tray_icon
+        icon_image = Image.new("RGBA", (64, 64), (34, 197, 94, 255))
+        draw = ImageDraw.Draw(icon_image)
+        draw.ellipse((12, 12, 52, 52), fill=(15, 23, 42, 255))
+        draw.text((25, 19), "A", fill=(255, 255, 255, 255))
+        tray_icon = pystray.Icon(
+            "Aura",
+            icon_image,
+            "Aura is running in the background",
+            menu=pystray.Menu(
+                pystray.MenuItem("Show Aura (Alt+Z)", show_window, default=True),
+                pystray.MenuItem("Quit Aura", quit_application),
+            ),
+        )
+        tray_icon.run_detached()
+
     # Window closing event handler
     def on_window_closing():
-        print("🛑 Window closing, shutting down services...")
-        asyncio_service_thread.stop()
-        return True  # Allow window to close
-    
+        if is_quitting:
+            print("Window closing, shutting down services...")
+            asyncio_service_thread.stop()
+            return True
+
+        window.hide()
+        print("Aura is still running in the background. Press Alt+Z to show it again.")
+        return False
+
     window.events.shown += on_window_shown
     window.events.closing += on_window_closing
+    start_tray_icon()
     
     return window
-
 # --- Main Application Entry Point ---
 def main():
     """Main application entry point"""
