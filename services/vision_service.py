@@ -282,6 +282,24 @@ class VisionService:
         
         # Perform vision analysis
         return await vision_manager.analyze_screenshots(prompt, screenshots, languages)
+
+    async def analyze_with_prompt(self, provider_name: str, model_name: str,
+                                  prompt: str, screenshots: List[str],
+                                  languages: List[str] = None) -> Tuple[str, Dict[str, Any]]:
+        """Analyze screenshots with a caller-provided prompt."""
+
+        vision_manager = self.get_vision_manager(provider_name, model_name)
+        if not vision_manager:
+            return f"Vision model {provider_name} - {model_name} not available.", {
+                "error": "vision_model_not_found",
+                "provider": provider_name,
+                "model": model_name
+            }
+
+        if not prompt or not prompt.strip():
+            prompt = self.generate_coding_analysis_prompt(languages)
+
+        return await vision_manager.analyze_screenshots(prompt, screenshots, languages)
     
     def generate_coding_analysis_prompt(self, languages: List[str] = None) -> str:
         """Generate a comprehensive prompt for analyzing screenshots, capable of handling coding problems, MCQs, or a mix."""

@@ -375,6 +375,8 @@ Never leave the interview window. Control everything instantly with our ergonomi
 | | `Alt + P` | Process screenshot queue | Get AI analysis overlaid invisibly |
 | | `Alt + R` | Clear screenshot queue | Reset captured images |
 | | `Alt + T` | Cycle vision model | Switch between Gemini/Groq vision |
+| **Universal Copy** | `Alt + Shift + C` | Drag-select visible text in any app and copy it with local Windows OCR | Works with PDFs, video, canvas, remote desktops, and non-selectable UI; press `Ctrl + V` to paste |
+| **Universal Ask** | `Alt + Shift + A` | OCR-select text, copy it, and send it to Aura's active AI | Requires an active Aura session |
 | **AI & Audio** | `Alt + Q` | Switch to primary model | Fastest model on demand |
 | | `Alt + W` | Switch to secondary model | Alternative AI personality |
 | | `Alt + E` | Auto-select best model | Let Aura pick the fastest available |

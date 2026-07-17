@@ -8,6 +8,7 @@ class ScreenshotService {
         this.isCapturing = false;
         this.visionConfig = null;
         this.programmingLanguages = [];
+        this.analysisMode = 'coding';
         
         this.setupUI();
         this.setupStyles();
@@ -26,6 +27,10 @@ class ScreenshotService {
                     <button id="clear-queue-btn" class="queue-btn clear">Clear All</button>
                     <button id="process-queue-btn" class="queue-btn process" disabled>Process (0)</button>
                 </div>
+            </div>
+            <div class="queue-mode-selector" role="group" aria-label="Screenshot analysis mode">
+                <button type="button" class="queue-mode-btn active" data-analysis-mode="coding">Code</button>
+                <button type="button" class="queue-mode-btn" data-analysis-mode="practice">Practice Exam</button>
             </div>
             <div class="queue-grid" id="queue-grid">
                 <!-- Screenshots will be added here -->
@@ -57,6 +62,12 @@ class ScreenshotService {
                 
                 document.getElementById('process-queue-btn')?.addEventListener('click', () => {
                     this.processQueue();
+                });
+
+                document.querySelectorAll('.queue-mode-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        this.setAnalysisMode(btn.dataset.analysisMode || 'coding');
+                    });
                 });
                 
                 console.log('✅ Screenshot queue UI added to live view');
@@ -106,6 +117,37 @@ class ScreenshotService {
                 .queue-controls {
                     display: flex;
                     gap: 6px;
+                }
+
+                .queue-mode-selector {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 6px;
+                    padding: 10px 12px 0;
+                }
+
+                .queue-mode-btn {
+                    height: 30px;
+                    border: 1px solid rgba(255, 255, 255, 0.12);
+                    border-radius: 4px;
+                    background: rgba(255, 255, 255, 0.06);
+                    color: rgba(255, 255, 255, 0.72);
+                    cursor: pointer;
+                    font-size: 11px;
+                    font-weight: 700;
+                    letter-spacing: 0;
+                    transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+                }
+
+                .queue-mode-btn:hover {
+                    background: rgba(255, 255, 255, 0.1);
+                    color: #ffffff;
+                }
+
+                .queue-mode-btn.active {
+                    background: rgba(67, 214, 151, 0.18);
+                    border-color: rgba(67, 214, 151, 0.55);
+                    color: #b8ffdf;
                 }
                 
                 .queue-btn {
@@ -308,6 +350,15 @@ class ScreenshotService {
         this.programmingLanguages = languages;
         console.log('💻 Programming languages set:', this.programmingLanguages);
     }
+
+    setAnalysisMode(mode) {
+        this.analysisMode = mode === 'practice' ? 'practice' : 'coding';
+        document.querySelectorAll('.queue-mode-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.analysisMode === this.analysisMode);
+        });
+        this.updateQueueUI();
+        console.log('🧭 Screenshot analysis mode set:', this.analysisMode);
+    }
     
     // Screenshot capture methods
     async captureScreenshot() {
@@ -324,100 +375,37 @@ class ScreenshotService {
         this.isCapturing = true;
         
         try {
-            // Try to use existing screen video track first
-            let videoTrack = null;
-            
-            // Import audio handler to get existing screen track
-            if (window.getScreenVideoTrack && window.isScreenSharingAvailable) {
-                if (window.isScreenSharingAvailable()) {
-                    videoTrack = window.getScreenVideoTrack();
-                    console.log('📹 Using existing screen video track for screenshot');
-                } else {
-                    console.warn('⚠️ Screen sharing not available, requesting new permission');
-                }
-            }
-            
-            // Fallback to requesting new permission if no existing track
-            if (!videoTrack) {
-                if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-                    throw new Error('Screen capture not supported in this browser');
-                }
-                
-                const stream = await navigator.mediaDevices.getDisplayMedia({
-                    video: {
-                        mediaSource: 'screen',
-                        width: { max: 1920 },
-                        height: { max: 1080 }
-                    }
-                });
-                
-                videoTrack = stream.getVideoTracks()[0];
-                if (!videoTrack) {
-                    throw new Error('No video track available from screen capture');
-                }
-                
-                console.log('📹 Created new screen capture stream for screenshot');
-            }
-            
-            // Create video element to capture frame
-            const video = document.createElement('video');
-            video.srcObject = new MediaStream([videoTrack]);
-            video.play();
-            
-            // Wait for video to load
-            await new Promise((resolve, reject) => {
-                video.onloadedmetadata = resolve;
-                video.onerror = reject;
-                // Add timeout to prevent hanging
-                setTimeout(() => reject(new Error('Video load timeout')), 5000);
+            // Use Aura's native Windows capture path. This avoids
+            // getDisplayMedia and never opens a browser screen-share picker.
+            const response = await fetch('/api/native-screenshot', {
+                method: 'GET',
+                cache: 'no-store'
             });
-            
-            // Create canvas and capture frame
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0);
-            
-            // Convert to blob
-            const blob = await new Promise(resolve => {
-                canvas.toBlob(resolve, 'image/jpeg', 0.8);
-            });
-            
-            // Only stop the track if we created a new one (not reusing existing)
-            if (!window.getScreenVideoTrack || videoTrack !== window.getScreenVideoTrack()) {
-                videoTrack.stop();
-                console.log('📹 Stopped temporary screen capture track');
+            const capture = await response.json();
+            if (!response.ok || !capture.success || !capture.dataUrl) {
+                throw new Error(capture.error || 'Native screen capture failed');
             }
-            
-            // Clean up video element
-            video.srcObject = null;
-            
-            // Add to queue
+
             const screenshot = {
                 id: Date.now(),
-                blob: blob,
-                dataUrl: canvas.toDataURL('image/jpeg', 0.8),
+                dataUrl: capture.dataUrl,
                 timestamp: new Date(),
-                size: blob.size
+                size: capture.size,
+                width: capture.width,
+                height: capture.height
             };
-            
             this.addToQueue(screenshot);
-            this.showNotification('📸 Screenshot Captured (Global)', `Added to queue (${this.screenshotQueue.length}/${this.maxScreenshots}) - Alt+P to process`, 'success');
-            
+            this.showNotification(
+                '📸 Screenshot Captured',
+                `Added to queue (${this.screenshotQueue.length}/${this.maxScreenshots}) - Alt+P to process`,
+                'success'
+            );
             return true;
-            
+
         } catch (error) {
             console.error('❌ Screenshot capture failed:', error);
             
-            if (error.name === 'NotAllowedError') {
-                this.showNotification('❌ Permission Denied', 'Screen capture permission was denied', 'error');
-            } else if (error.message.includes('timeout')) {
-                this.showNotification('❌ Capture Timeout', 'Screenshot capture took too long', 'error');
-            } else {
-                this.showNotification('❌ Capture Failed', error.message, 'error');
-            }
+            this.showNotification('❌ Capture Failed', error.message, 'error');
             
             return false;
         } finally {
@@ -456,11 +444,13 @@ class ScreenshotService {
         if (queueTitle && this.visionConfig) {
             const currentProvider = window.appState?.visionMode?.currentVisionProvider || 'primary';
             const providerType = currentProvider === 'primary' ? '1°' : '2°';
-            queueTitle.textContent = `📸 Vision Queue (${providerType} ${this.visionConfig.model})`;
+            const modeTitle = this.analysisMode === 'practice' ? 'Practice Exam Queue' : 'Vision Queue';
+            queueTitle.textContent = `📸 ${modeTitle} (${providerType} ${this.visionConfig.model})`;
         }
         
         // Update process button
-        processBtn.textContent = `Process (${this.screenshotQueue.length})`;
+        const actionLabel = this.analysisMode === 'practice' ? 'Solve' : 'Process';
+        processBtn.textContent = `${actionLabel} (${this.screenshotQueue.length})`;
         processBtn.disabled = this.screenshotQueue.length === 0 || !this.visionConfig;
         
         // Update grid
@@ -506,12 +496,13 @@ class ScreenshotService {
         }
         
         try {
-            const prompt = this.generateCodingPrompt();
+            const prompt = this.generatePrompt();
             const screenshots = this.screenshotQueue.map(s => s.dataUrl);
+            const modeLabel = this.analysisMode === 'practice' ? 'practice exam' : 'coding problem';
             
             console.log('🔄 Processing comprehensive multi-screenshot analysis...');
             console.log(`📸 Analyzing ${screenshots.length} screenshots together as one complete problem`);
-            console.log('🧠 Generating two distinct solution approaches with full implementations');
+            console.log(`🧠 Analysis mode: ${modeLabel}`);
             
             // Send to vision processing service
             const result = await this.sendToVisionAI(prompt, screenshots);
@@ -522,8 +513,8 @@ class ScreenshotService {
                 
                 // Clear queue after successful processing
                 this.clearQueue();
-                this.showNotification('✅ Comprehensive Analysis Complete', 
-                    `${screenshots.length} screenshots analyzed with 2 solution approaches`, 'success');
+                this.showNotification('✅ Analysis Complete', 
+                    `${screenshots.length} screenshot${screenshots.length > 1 ? 's' : ''} analyzed in ${modeLabel} mode`, 'success');
             } else {
                 this.showNotification('❌ Analysis Failed', result.error || 'Vision AI processing failed', 'error');
             }
@@ -534,9 +525,16 @@ class ScreenshotService {
         } finally {
             if (processBtn) {
                 processBtn.disabled = false;
-                processBtn.textContent = `Process (${this.screenshotQueue.length})`;
+                const actionLabel = this.analysisMode === 'practice' ? 'Solve' : 'Process';
+                processBtn.textContent = `${actionLabel} (${this.screenshotQueue.length})`;
             }
         }
+    }
+
+    generatePrompt() {
+        return this.analysisMode === 'practice'
+            ? this.generatePracticeExamPrompt()
+            : this.generateCodingPrompt();
     }
     
     generateCodingPrompt() {
@@ -621,6 +619,40 @@ Explanation of the alternative approach with examples.
 
 Focus on being educational and helping understand both the solutions and the underlying concepts with CLEAR SEPARATION between each approach.`;
     }
+
+    generatePracticeExamPrompt() {
+        return `You are a practice exam tutor. Analyze the provided screenshot(s) from an ungraded practice exam or study material.
+
+Important boundaries:
+- Treat this as practice, study, or review material only.
+- If the screenshot appears to show a live, graded, proctored, locked-down, or real certification exam, do not provide direct answers. Instead, explain the concepts and give a similar practice example.
+
+For practice content, provide a clear answer and teach the reasoning.
+
+Analyze ALL screenshots together as one complete item or set of items. If there are multiple questions, answer each one separately.
+
+Use this structure:
+
+# Practice Answer
+
+## Question(s) Detected
+- Restate each visible question briefly.
+- List any visible answer choices or relevant data.
+
+## Direct Answer
+- Give the best answer for each practice question.
+- For multiple choice, include the option letter and option text when visible.
+- If text is unclear, state what is uncertain before answering.
+
+## Why This Is Correct
+- Explain the reasoning step by step.
+- Show calculations or logic where relevant.
+- For multiple choice, explain why the main incorrect choices are wrong when useful.
+
+## Study Notes
+- Give the key rule, formula, concept, or pattern to remember.
+- Add one quick similar practice question with its answer.`;
+    }
     
     async sendToVisionAI(prompt, screenshots) {
         try {
@@ -631,7 +663,8 @@ Focus on being educational and helping understand both the solutions and the und
                 prompt: prompt,
                 screenshots: screenshots,
                 visionConfig: this.visionConfig,
-                languages: this.programmingLanguages
+                languages: this.programmingLanguages,
+                analysisMode: this.analysisMode
             };
             
             // Send via WebSocket if available

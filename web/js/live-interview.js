@@ -450,7 +450,8 @@ class LiveInterviewUI {
             analysisLength: analysis?.length || 0,
             provider: metadata?.provider,
             model: metadata?.model,
-            screenshotCount: metadata?.screenshotCount
+            screenshotCount: metadata?.screenshotCount,
+            analysisMode: metadata?.analysisMode
         });
         
         // Filter thinking content from analysis
@@ -535,7 +536,9 @@ class LiveInterviewUI {
         
         const label = document.createElement('span');
         label.className = 'label';
-        label.innerHTML = '👁️ Vision AI Analysis';
+        label.innerHTML = metadata.analysisMode === 'practice'
+            ? '👁️ Practice Exam Solver'
+            : '👁️ Vision AI Analysis';
         
         const metaInfo = document.createElement('div');
         metaInfo.className = 'vision-meta';
@@ -546,6 +549,9 @@ class LiveInterviewUI {
         }
         if (metadata.screenshotCount) {
             metaText += ` • ${metadata.screenshotCount} screenshot${metadata.screenshotCount > 1 ? 's' : ''}`;
+        }
+        if (metadata.analysisMode === 'practice') {
+            metaText += ' • Practice mode';
         }
         if (metadata.languages && metadata.languages.length > 0) {
             metaText += ` • ${metadata.languages.join(', ')}`;

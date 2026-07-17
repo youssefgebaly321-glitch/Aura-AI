@@ -260,7 +260,8 @@ export class WebSocketHandler {
                 provider: result.provider,
                 model: result.model,
                 screenshotCount: result.screenshot_count,
-                languages: result.languages
+                languages: result.languages,
+                analysisMode: result.analysis_mode
             };
             liveInterviewUI.addVisionAnalysis(result.analysis, metadata);
         } else if (!result.success && result.error) {

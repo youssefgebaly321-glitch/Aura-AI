@@ -248,6 +248,25 @@ async function resetScreenshotQueue() {
     return await stateManager.resetScreenshotQueue();
 }
 
+function processUniversalCopyText(text) {
+    const extractedText = String(text || '').trim();
+    if (!extractedText) {
+        presetManager.showErrorNotification('Universal Copy found no text.');
+        return false;
+    }
+    if (!stateManager.isLiveInterviewActive()) {
+        presetManager.showErrorNotification(
+            'Start an Aura session before using Universal Ask.'
+        );
+        return false;
+    }
+    webSocketHandler.sendMessage('text_analysis', {
+        text: extractedText,
+        source: 'universal_copy'
+    });
+    return true;
+}
+
 // --- Audio Toggle Functions ---
 function toggleMicMute() {
     return stateManager.toggleMicMute();
@@ -392,6 +411,7 @@ window.toggleVisionMode = toggleVisionMode;
 window.captureScreenshot = captureScreenshot;
 window.processScreenshots = processScreenshots;
 window.resetScreenshotQueue = resetScreenshotQueue;
+window.processUniversalCopyText = processUniversalCopyText;
 window.toggleMicMute = toggleMicMute;
 window.toggleUniversalMute = toggleUniversalMute;
 window.endInterview = endInterview;

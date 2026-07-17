@@ -1,7 +1,7 @@
 import webview
 import uvicorn
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 import asyncio
 import aiofiles
@@ -16,6 +16,11 @@ import socket
 import threading
 import shutil
 from pathlib import Path
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # --- Auto-create .env from .env.example if missing ---
 _env_path = Path(".env")
@@ -193,6 +198,17 @@ class GlobalCommandMonitor:
                 self._execute_browser_command('if (window.toggleUniversalMute) { window.toggleUniversalMute(); } else { console.warn("toggleUniversalMute not available"); }')
             elif command == 'switch_vision_model':
                 self._execute_browser_command('if (window.switchVisionModel) { window.switchVisionModel(); } else { console.warn("switchVisionModel not available"); }')
+            elif command == 'analyze_copied_text':
+                copied_text = command_data.get('text', '').strip()
+                if not copied_text:
+                    print("Universal Ask received empty OCR text")
+                    return False
+                text_json = orjson.dumps(copied_text).decode('utf-8')
+                self._execute_browser_command(
+                    f'if (window.processUniversalCopyText) {{ '
+                    f'window.processUniversalCopyText({text_json}); '
+                    f'}} else {{ console.warn("processUniversalCopyText not available"); }}'
+                )
             elif command == 'reset_interview':
                 self._execute_browser_command('if (window.resetInterview) { window.resetInterview(); } else { console.warn("resetInterview not available"); }')
             elif command == 'scroll':
@@ -263,6 +279,21 @@ app.mount("/static", StaticFiles(directory="web"), name="static")
 async def read_index(request: Request):
     """Serves the main index.html file."""
     return FileResponse(os.path.join('web', 'index.html'))
+
+
+@app.get("/api/native-screenshot")
+async def native_screenshot():
+    """Capture the desktop locally without invoking browser screen sharing."""
+    try:
+        from services.universal_copy import capture_screen_data_url
+
+        result = await asyncio.to_thread(capture_screen_data_url)
+        return JSONResponse({"success": True, **result})
+    except Exception as exc:
+        print(f"Native screenshot failed: {exc}")
+        return JSONResponse(
+            {"success": False, "error": str(exc)}, status_code=500
+        )
 
 # --- Async Server Management ---
 class UvicornServer:

@@ -880,6 +880,30 @@ class WindowManager:
             self.send_vision_command("reset_screenshot_queue")
             return False
 
+        def on_universal_copy():
+            """OCR-select visible text anywhere (Alt+Shift+C)."""
+            try:
+                from services.universal_copy import universal_copy_service
+
+                if universal_copy_service.trigger():
+                    print("Universal Copy selector opened")
+            except Exception as exc:
+                print(f"Universal Copy could not start: {exc}")
+            return False
+
+        def on_universal_ask():
+            """OCR-select text, copy it, and send it to Aura AI."""
+            try:
+                from services.universal_copy import universal_copy_service
+
+                if universal_copy_service.trigger(
+                    self.send_universal_copy_to_ai
+                ):
+                    print("Universal Ask selector opened")
+            except Exception as exc:
+                print(f"Universal Ask could not start: {exc}")
+            return False
+
         def on_enable_proctoring_stealth():
             """Enable proctoring stealth mode (Alt+Shift+S)"""
             self.enable_proctoring_stealth_mode()
@@ -967,6 +991,8 @@ class WindowManager:
             '<alt>+s': on_capture_screenshot,  # Capture screenshot (replaces screen share hide)
             '<alt>+p': on_process_screenshots, # Process screenshots
             '<alt>+r': on_reset_screenshot_queue, # Reset screenshot queue
+            '<alt>+<shift>+c': on_universal_copy, # OCR-select text anywhere
+            '<alt>+<shift>+a': on_universal_ask, # OCR-select and ask Aura AI
             '<alt>+q': on_switch_primary,      # Switch to primary preset
             '<alt>+w': on_switch_secondary,    # Switch to secondary preset
             '<alt>+e': on_auto_select,         # Auto-select best AI preset
@@ -1015,6 +1041,20 @@ class WindowManager:
             })
         except Exception as e:
             print(f"❌ Error sending vision command: {e}")
+
+    def send_universal_copy_to_ai(self, text: str):
+        """Queue OCR text for analysis by the active Aura session."""
+        try:
+            from datetime import datetime
+
+            self._write_command_file({
+                "command": "analyze_copied_text",
+                "text": text,
+                "timestamp": datetime.now().isoformat(),
+                "source": "global_hotkey"
+            })
+        except Exception as exc:
+            print(f"Error sending Universal Copy text to AI: {exc}")
 
     def send_transparency_command(self, level: str):
         """Send transparency command to the application"""
@@ -1158,6 +1198,8 @@ class WindowManager:
         print("   Alt+S: Capture screenshot")
         print("   Alt+P: Process screenshots with AI")
         print("   Alt+R: Reset screenshot queue")
+        print("   Alt+Shift+C: Universal Copy (local OCR)")
+        print("   Alt+Shift+A: Universal Ask (OCR text to Aura AI)")
         print("   Alt+O: Reset interview session")
         print("   Alt+Q: Switch to primary AI preset")
         print("   Alt+W: Switch to secondary AI preset")

@@ -122,6 +122,7 @@ class InterviewSession:
             screenshots = payload.get('screenshots', [])
             vision_config = payload.get('visionConfig', {})
             languages = payload.get('languages', [])
+            analysis_mode = payload.get('analysisMode', 'coding')
             
             if not screenshots:
                 await self._send_json("vision_analysis_result", {
@@ -142,9 +143,10 @@ class InterviewSession:
             
             print(f"🧠 Analyzing {len(screenshots)} screenshots with {provider_name}-{model_name}")
             
-            analysis, result_info = await vision_service.analyze_coding_problem(
+            analysis, result_info = await vision_service.analyze_with_prompt(
                 provider_name=provider_name,
                 model_name=model_name,
+                prompt=prompt,
                 screenshots=screenshots,
                 languages=languages
             )
@@ -156,6 +158,7 @@ class InterviewSession:
                 "model": model_name,
                 "screenshot_count": len(screenshots),
                 "languages": languages,
+                "analysis_mode": analysis_mode,
                 **result_info
             })
             
@@ -167,6 +170,46 @@ class InterviewSession:
                 "success": False,
                 "error": f"Vision analysis failed: {str(e)}"
             })
+
+    async def handle_text_analysis(self, payload: dict):
+        """Process text supplied by Universal Ask through the active LLM."""
+        self._touch()
+        text = str(payload.get("text", "")).strip()
+        if not text:
+            await self._send_json(
+                "error", {"message": "Universal Ask received no text."}
+            )
+            return
+        if not self.llm_manager or not self.websocket:
+            await self._send_json(
+                "error",
+                {"message": "Start an Aura session before using Universal Ask."},
+            )
+            return
+
+        try:
+            await self._send_json(
+                "ai_processing_started",
+                {"question": text, "source": "universal_copy"},
+            )
+
+            async def stream_callback(chunk: str, chunk_type: str):
+                return await self._send_json(
+                    "ai_answer_chunk",
+                    {"chunk": chunk, "chunk_type": chunk_type},
+                )
+
+            answer, result_info = await self.llm_manager.get_ai_answer(
+                text, stream_callback
+            )
+            await self._send_json(
+                "ai_answer_complete", {"answer": answer, **result_info}
+            )
+        except Exception as exc:
+            print(f"Universal Ask processing failed: {exc}")
+            await self._send_json(
+                "error", {"message": "Universal Ask AI processing failed."}
+            )
 
     async def handle_end_interview(self, payload: dict):
         """Handles the end of an interview."""
